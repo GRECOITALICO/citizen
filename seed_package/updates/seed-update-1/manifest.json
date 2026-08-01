@@ -1,0 +1,37 @@
+{
+  "asset_version": "sha256:ffb9970b3b0dd10dc066eb25fbc2d834476f942920cf0545d913724c684b5a55",
+  "assets": [
+    {
+      "asset_id": "citizen_ui_shell",
+      "content_hash": "20448a08598784f03054405622e7baba2ab2765afc402aec2fa22763e6a12e58",
+      "kind": "citizen_ui",
+      "version": "1"
+    },
+    {
+      "asset_id": "docs_index",
+      "content_hash": "6086c7d23bb26bb4b583ab80e5dd43f24011251262394673e48765d1e134dfd7",
+      "kind": "documentation",
+      "version": "2"
+    },
+    {
+      "asset_id": "status_seed",
+      "content_hash": "aa0b574925f3ae17798171ffa7529e2be939c43704bb2b45bc6037c22c38989c",
+      "kind": "status",
+      "version": "1"
+    },
+    {
+      "asset_id": "website_shell",
+      "content_hash": "1b1fc1acec4c116a704c427ccf4b9d9db0827b2f1957164a2ec227e76436e6e2",
+      "kind": "website",
+      "version": "1"
+    }
+  ],
+  "citizen_id": "",
+  "citizen_version": "1.0.1-seed",
+  "compatibility": "seed-2026.1",
+  "knowledge_version": "sha256:ffb9970b3b0dd10dc066eb25fbc2d834476f942920cf0545d913724c684b5a55",
+  "prev_manifest_hash": "",
+  "release": "2026-08-01T12:00:00Z",
+  "runtime_version": "0.1.0",
+  "signature": "6aa178d7abf61922620e5b60280f4c2fa0454d483ef9449e32577367f42174cb"
+}

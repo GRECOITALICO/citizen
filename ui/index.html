@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Citizen Birth Observatory</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main>
+    <section id="identity">
+      <h1>IDENTITY</h1>
+      <dl>
+        <dt>Citizen ID</dt>
+        <dd id="citizen-id">—</dd>
+        <dt>Age</dt>
+        <dd id="age">—</dd>
+        <dt>Runtime Version</dt>
+        <dd id="runtime-version">—</dd>
+        <dt>Manifest Version</dt>
+        <dd id="manifest-version">—</dd>
+      </dl>
+      <button id="export-btn" type="button">Export Birth Package</button>
+    </section>
+
+    <section id="sync">
+      <h1>SYNC</h1>
+      <button id="sync-btn" type="button" class="green" disabled>Current</button>
+    </section>
+
+    <section id="journal">
+      <h1>CITIZEN LIFE JOURNAL</h1>
+      <div id="timeline" class="timeline"></div>
+      <pre id="bio"></pre>
+      <div id="node-detail" class="node-detail hidden"></div>
+    </section>
+
+    <section id="terminal">
+      <h1>TERMINAL</h1>
+      <pre id="term"></pre>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

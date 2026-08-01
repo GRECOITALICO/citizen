@@ -1,0 +1,16 @@
+[project]
+name = "citizen-seed"
+version = "0.1.0"
+description = "Citizen Seed — Asset-First minimal Runtime"
+requires-python = ">=3.11"
+readme = "README.md"
+
+[project.scripts]
+citizen-seed = "citizen_seed.__main__:main"
+
+[tool.setuptools.package-dir]
+"" = "runtime"
+
+[tool.setuptools.packages.find]
+where = ["runtime"]
+include = ["citizen_seed*"]

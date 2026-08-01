@@ -1,0 +1,4 @@
+Citizen Seed 0.1 — portable Python seed.
+Linux: ./install.sh
+macOS: ./install.sh
+Windows: install via PowerShell scripts/install_service_windows.ps1 after unpack.
