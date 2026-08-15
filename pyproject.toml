@@ -4,6 +4,7 @@ version = "0.2.0"
 description = "Citizen 0.2 source line — Asset-First minimal Runtime"
 requires-python = ">=3.11"
 readme = "README.md"
+dependencies = ["cryptography>=43,<45"]
 
 [project.scripts]
 citizen-seed = "citizen_seed.__main__:main"

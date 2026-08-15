@@ -35,6 +35,37 @@ release_decision_id
 `manifest_digest` and detached `signature` fields excluded. A protected
 Ed25519 signer signs that digest later, without altering what it attests to.
 
+## External signature verification v1
+
+The authority message is the ASCII bytes of the frozen `manifest_digest`
+string (for example, `sha256:<64 lowercase hex>`). The signer and verifier do
+not prehash it, add a newline, or reserialize the manifest. The standard
+Ed25519 operation retains its defined internal cryptographic processing.
+
+`signature.value` is standard Base64 encoding of exactly 64 raw Ed25519
+signature bytes. The algorithm identifier remains `Ed25519`.
+
+The verifier receives an external JSON trust root; no production public key is
+hardcoded in Citizen:
+
+```json
+{
+  "schema_version": "citizen-release-trust-root/v1",
+  "key_id": "<authority key id>",
+  "algorithm": "Ed25519",
+  "public_key_format": "spki_der_base64",
+  "public_key": "<AWS KMS GetPublicKey DER SPKI Base64>",
+  "status": "ACTIVE"
+}
+```
+
+For a signed bundle, `scripts/verify_release_bundle.py` requires
+`--trust-root <path>`. It fails closed for a missing, malformed, inactive, or
+mismatched trust root; wrong key ID or algorithm; non-Base64, truncated, or
+trailing signature bytes; changed manifest digest; and invalid Ed25519
+signatures. Pending authority manifests remain explicitly verifiable only with
+`--allow-pending-signature`.
+
 ## Decision v1
 
 `release-decision.json` is a separate authorization object. Its status is

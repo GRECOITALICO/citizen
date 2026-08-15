@@ -18,6 +18,7 @@ from citizen_seed.release_contract import (  # noqa: E402
     validate_manifest,
     validate_release_decision,
 )
+from citizen_seed.release_verifier import load_trust_root, verify_release_signature  # noqa: E402
 
 
 def sha256_prefixed(path: Path) -> str:
@@ -28,7 +29,9 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def verify(bundle: Path, *, allow_pending_signature: bool) -> None:
+def verify(
+    bundle: Path, *, allow_pending_signature: bool, trust_root_path: Path | None
+) -> None:
     manifest = load_json(bundle / "release-manifest.json")
     decision = load_json(bundle / "release-decision.json")
     build = load_json(bundle / "build.json")
@@ -51,8 +54,13 @@ def verify(bundle: Path, *, allow_pending_signature: bool) -> None:
         raise ContractError("release decision manifest digest mismatch")
     if decision["artifact_sha256"] != manifest["artifact_sha256"]:
         raise ContractError("release decision artifact digest mismatch")
-    if not allow_pending_signature and manifest["signature"]["status"] != "SIGNED":
-        raise ContractError("bundle has no authority signature")
+    if manifest["signature"]["status"] == "PENDING_AUTHORITY":
+        if not allow_pending_signature:
+            raise ContractError("bundle has no authority signature")
+    else:
+        if trust_root_path is None:
+            raise ContractError("bundle has no external trust root")
+        verify_release_signature(manifest, load_trust_root(trust_root_path))
 
     with tarfile.open(artifact, "r:gz") as archive:
         names = set(archive.getnames())
@@ -71,9 +79,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bundle", type=Path)
     parser.add_argument("--allow-pending-signature", action="store_true")
+    parser.add_argument(
+        "--trust-root",
+        type=Path,
+        help="External JSON trust root required to verify a signed release manifest.",
+    )
     args = parser.parse_args()
     try:
-        verify(args.bundle, allow_pending_signature=args.allow_pending_signature)
+        verify(
+            args.bundle,
+            allow_pending_signature=args.allow_pending_signature,
+            trust_root_path=args.trust_root,
+        )
     except (ContractError, OSError, json.JSONDecodeError, tarfile.TarError) as exc:
         print(f"VERIFICATION_FAILED: {exc}", file=sys.stderr)
         return 2
