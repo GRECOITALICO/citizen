@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify a prepared Citizen 0.2 Linux bundle without requiring a signature."""
+"""Verify a Citizen 0.2 Linux bundle and its external release signature."""
 
 from __future__ import annotations
 
