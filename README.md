@@ -1,6 +1,6 @@
-# Citizen Seed 0.1
+# Citizen 0.2 Source Line
 
-**First Empirical Birth — Certified**
+**Canonical release source — not yet released, signed, or published**
 
 Public, self-contained seed. No private founder environment required.
 
@@ -17,9 +17,10 @@ After install, Citizen wakes on OS boot (systemd / LaunchAgent / Windows Service
 | Doc | Role |
 |-----|------|
 | [INSTALL.md](INSTALL.md) | Install steps |
-| [RELEASE_NOTES.md](RELEASE_NOTES.md) | What 0.1 is |
+| [RELEASE_NOTES.md](RELEASE_NOTES.md) | 0.2 source-line status |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [CERTIFIED_0.1.md](CERTIFIED_0.1.md) | Freeze law |
+| [release/v0.2.0/CONTRACT.md](release/v0.2.0/CONTRACT.md) | Release provenance and build contract |
 | [docs/citizen-life/GENESIS.md](docs/citizen-life/GENESIS.md) | Constitution of the Citizen |
 | [docs/citizen-life/](docs/citizen-life/) | Citizen Life record |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Planes diagram |
@@ -32,10 +33,12 @@ Legacy Observatory debug serve remains: `python3 -m citizen_seed serve` (port **
 
 Runtime executes Assets only. Business knowledge lives in Assets, never in Runtime.
 
-## Not in 0.1
+## Not in Citizen 0.2
 
 CONRRAD · Builder · HARLEMM · Planner · Scheduler · IA
 
 ## Versions
 
-See `VERSION` (`0.1.0`). Future lines: 0.2, 0.3, 1.0 — without rewriting 0.1.
+`VERSION` is `0.2.0`. The certified 0.1 evidence remains preserved under its
+historical documents and Git commit. This source line creates no tag, release,
+signature, or publication.

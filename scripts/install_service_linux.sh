@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install Citizen Seed 0.1 as a permanent systemd --user service (Linux).
+# Install Citizen 0.2 as a permanent systemd --user service (Linux).
 # Does not modify Runtime / Foundation / GENESIS / Citizen Life / Papers.
 set -euo pipefail
 
@@ -31,7 +31,7 @@ mkdir -p "${UNIT_DIR}" "${CITIZEN_HOME}/ops"
 
 cat > "${UNIT_PATH}" <<EOF
 [Unit]
-Description=Citizen Seed 0.1 Living Runtime
+Description=Citizen 0.2 Living Runtime
 After=network-online.target
 Wants=network-online.target
 

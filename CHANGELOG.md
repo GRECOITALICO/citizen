@@ -1,5 +1,17 @@
 # CHANGELOG — Citizen Seed
 
+## [0.2.0] — Source line / unreleased
+
+### Added
+
+- Separate canonical release-manifest and release-decision contracts
+- Deterministic Linux source-distribution build and bundle verifier
+- External-only Ed25519 signature interface and immutable-distribution contract
+
+### Preserved
+
+- Citizen Seed 0.1 history, certified documentation, and release material
+
 ## [0.1.0] — 2026-08-01 — Certified / First Empirical Birth
 
 ### Added

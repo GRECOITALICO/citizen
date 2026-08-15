@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install Citizen Seed 0.1 as a macOS LaunchAgent.
+# Install Citizen 0.2 as a macOS LaunchAgent.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

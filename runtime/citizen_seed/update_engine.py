@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .assets import AssetLoader
+from . import RUNTIME_VERSION
 from .diary import write as diary_write
 from .evidence import append as evidence_append
 from .journal import write as journal_write
@@ -186,6 +187,10 @@ class UpdateEngine:
             if not verify_manifest(cand, self.secret):
                 continue
             if cand.compatibility != current.compatibility:
+                continue
+            # Asset packages cannot downgrade or replace the running body.
+            # A 0.2 source line accepts only packages made for its runtime.
+            if cand.runtime_version != RUNTIME_VERSION:
                 continue
             if cand.citizen_id and cand.citizen_id != current.citizen_id:
                 continue

@@ -207,7 +207,7 @@ def seed_version() -> str:
         if v:
             return v.lstrip("v")
     vf = SEED_ROOT / "VERSION"
-    return vf.read_text(encoding="utf-8").strip() if vf.is_file() else "0.1.0"
+    return vf.read_text(encoding="utf-8").strip() if vf.is_file() else "0.2.0"
 
 
 def set_current_version(ver: str) -> None:
@@ -250,7 +250,7 @@ def evolutionary_line(ver: str) -> dict:
         }
     return {
         "line": "citizen_seed_0_1",
-        "label": "Citizen Seed 0.1",
+        "label": "Citizen 0.2",
         "sync_color": "#4db8ff",
         "badge": "SEED 0.1",
         "badge_class": "gen-seed",
@@ -305,7 +305,7 @@ def ensure_birth_evolution() -> None:
         }
     )
     # Seed line: current package version as first living generation marker
-    ver = (SEED_ROOT / "VERSION").read_text(encoding="utf-8").strip() if (SEED_ROOT / "VERSION").is_file() else "0.1.0"
+    ver = (SEED_ROOT / "VERSION").read_text(encoding="utf-8").strip() if (SEED_ROOT / "VERSION").is_file() else "0.2.0"
     if not any(h.get("version") == ver and h.get("kind") != "birth" for h in read_evolution_history()):
         append_evolution(
             {

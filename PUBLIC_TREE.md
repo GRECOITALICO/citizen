@@ -1,8 +1,8 @@
-# Public tree — what ships in Citizen Seed 0.1
+# Public tree — Citizen 0.2 source line
 
 ```text
 citizen-seed/
-  VERSION                 # 0.1.0
+  VERSION                 # 0.2.0
   CERTIFIED_0.1.md
   INSTALL.md
   CHANGELOG.md
@@ -19,7 +19,8 @@ citizen-seed/
   identity|evidence|manifest|telemetry/  # placeholders (living state = .citizen/)
   docs/citizen-life/      # GENESIS + official life record (ships with 0.1)
   docs/research/          # foundation & lab serials
-  release/v0.1.0/         # Prepared release attachments (not a git tag)
+  release/v0.1.0/         # Historical 0.1 material (preserved)
+  release/v0.2.0/         # 0.2 release/distribution contracts (not a release)
   ARCHITECTURE.md
 ```
 

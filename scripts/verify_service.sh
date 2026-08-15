@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify Citizen Console / living service (Seed 0.1 operational layer).
+# Verify Citizen Console / living service (Citizen 0.2 operational layer).
 set -euo pipefail
 
 HOST="${CITIZEN_UI_HOST:-127.0.0.1}"

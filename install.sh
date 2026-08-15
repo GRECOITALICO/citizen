@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Citizen Seed 0.1 — Birth → permanent OS service → living Web UI (localhost:3434)
+# Citizen 0.2 source line — Birth → permanent OS service → living Web UI (localhost:3434)
 # Operational layer only; does not modify Runtime / Foundation / GENESIS / Life / Papers.
 set -euo pipefail
 
@@ -18,7 +18,7 @@ elif [[ -x "${ROOT}/scripts/install_service_linux.sh" ]]; then
   SCRIPTS="${ROOT}/scripts"
 fi
 
-echo "== Citizen Seed 0.1 (Living) =="
+echo "== Citizen 0.2 source line (Living) =="
 echo "home: ${CITIZEN_HOME}"
 
 if [[ -f "${CITIZEN_HOME}/boot/BOOTSTRAP_DISARMED" ]]; then

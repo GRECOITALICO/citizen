@@ -1,4 +1,4 @@
-# Install Citizen Seed 0.1 as a Windows Service (NSSM or sc.exe fallback).
+# Install Citizen 0.2 as a Windows Service (NSSM or sc.exe fallback).
 # Requires: PowerShell, python on PATH, optional NSSM for robust service wrap.
 # Does not modify Runtime / Foundation / GENESIS / Citizen Life / Papers.
 
@@ -71,7 +71,7 @@ cd /d $SeedRoot
   $bin = "cmd.exe /c `"$wrapper`""
   sc.exe stop $ServiceName 2>$null
   sc.exe delete $ServiceName 2>$null
-  sc.exe create $ServiceName binPath= $bin start= auto DisplayName= "Citizen Seed Living 0.1"
+  sc.exe create $ServiceName binPath= $bin start= auto DisplayName= "Citizen 0.2 Living"
   sc.exe start $ServiceName
   Write-Host "Installed Windows service via sc.exe: $ServiceName"
   Write-Host "Prefer installing NSSM for better service semantics."

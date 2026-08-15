@@ -96,7 +96,7 @@ def load_manifest(path: Path) -> Manifest:
 def default_seed_manifest(*, citizen_id: str, asset_entries: list[dict[str, str]], release: str) -> Manifest:
     asset_version = _merkle(asset_entries)
     return Manifest(
-        citizen_version="1.0.0-seed",
+        citizen_version=RUNTIME_VERSION,
         runtime_version=RUNTIME_VERSION,
         asset_version=asset_version,
         knowledge_version=asset_version,

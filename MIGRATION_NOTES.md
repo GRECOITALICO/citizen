@@ -1,4 +1,4 @@
-# Isolation notes — Citizen Seed 0.1
+# Isolation notes — Citizen 0.2 source line
 
 ## Public artifact
 
@@ -22,4 +22,6 @@ This tree is intended to run **alone**: clone the seed directory (or a future pu
 
 ## Publisher secret
 
-Dev HMAC material comes from `assets/publisher.secret.example` at Birth. Production PKI is out of scope for 0.1.
+Dev HMAC material comes from `assets/publisher.secret.example` at Birth. The
+separate release contract accepts only externally supplied Ed25519 signing;
+private production key material is out of scope for this source line.
