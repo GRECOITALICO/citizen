@@ -6,7 +6,7 @@ assets/genesis/status_seed/meta.json
 assets/genesis/status_seed/payload
 assets/genesis/website_shell/meta.json
 assets/genesis/website_shell/payload
-assets/publisher.secret.example
+assets/publisher_token.example
 assets/updates/README.md
 assets/updates/seed-update-1/assets/1b1fc1acec4c116a704c427ccf4b9d9db0827b2f1957164a2ec227e76436e6e2/meta.json
 assets/updates/seed-update-1/assets/1b1fc1acec4c116a704c427ccf4b9d9db0827b2f1957164a2ec227e76436e6e2/payload
