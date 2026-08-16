@@ -20,6 +20,9 @@ from citizen_seed.release_contract import (  # noqa: E402
 )
 from citizen_seed.release_verifier import load_trust_root, verify_release_signature  # noqa: E402
 
+LINUX_PLATFORM = "linux"
+WINDOWS_WSL2_PLATFORM = "windows-wsl2"
+
 
 def sha256_prefixed(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
@@ -27,6 +30,56 @@ def sha256_prefixed(path: Path) -> str:
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def verify_signing_input(bundle: Path, manifest: dict, build: dict) -> None:
+    path = bundle / "signing-input.json"
+    if not path.is_file():
+        raise ContractError("signing-input.json missing from bundle")
+    payload = load_json(path)
+    if payload.get("manifest_digest") != manifest["manifest_digest"]:
+        raise ContractError("signing input digest mismatch")
+    if payload.get("status") != "READY_FOR_AUTHORITY":
+        raise ContractError("signing input is not ready")
+    expected_sidecar_digest = payload.get("build_sidecar_digest")
+    if expected_sidecar_digest:
+        actual = "sha256:" + hashlib.sha256(
+            (json.dumps(build, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n")
+            .encode("utf-8")
+        ).hexdigest()
+        if actual != expected_sidecar_digest:
+            raise ContractError("build sidecar digest mismatch")
+
+
+def verify_artifact_layout(manifest: dict, archive: tarfile.TarFile) -> None:
+    names = set(archive.getnames())
+    root = f"citizen-{manifest['version']}"
+    platform = manifest["platform"]
+    if platform == LINUX_PLATFORM:
+        required = {
+            f"{root}/install.sh",
+            f"{root}/scripts/install_service_linux.sh",
+            f"{root}/VERSION",
+        }
+    elif platform == WINDOWS_WSL2_PLATFORM:
+        required = {
+            f"{root}/VERSION",
+            f"{root}/install.sh",
+            f"{root}/scripts/install_service_linux.sh",
+            f"{root}/scripts/verify_release_bundle.py",
+            f"{root}/windows/Install-CitizenWsl2.ps1",
+            f"{root}/windows/Register-CitizenAutoStart.ps1",
+            f"{root}/windows/Launch-CitizenUI.ps1",
+            f"{root}/windows/wsl2/setup.sh",
+            f"{root}/windows/wsl2/configure-systemd.sh",
+            f"{root}/docs/windows/WINDOWS_INSTALL.md",
+            f"{root}/release/windows-wsl2/bundle-paths.txt",
+        }
+    else:
+        raise ContractError(f"unsupported platform: {platform}")
+    missing = sorted(required - names)
+    if missing:
+        raise ContractError(f"installer paths missing from artifact: {missing}")
 
 
 def verify(
@@ -50,10 +103,20 @@ def verify(
             raise ContractError(f"build metadata {field} does not match release manifest")
         if decision[field] != manifest[field]:
             raise ContractError(f"release decision {field} does not match release manifest")
+    for field in ("version", "platform"):
+        if build.get(field) != manifest[field]:
+            raise ContractError(f"build sidecar {field} does not match release manifest")
+    if build.get("toolchain") != manifest.get("toolchain"):
+        raise ContractError("build sidecar toolchain does not match release manifest")
     if decision["manifest_digest"] != manifest["manifest_digest"]:
         raise ContractError("release decision manifest digest mismatch")
     if decision["artifact_sha256"] != manifest["artifact_sha256"]:
         raise ContractError("release decision artifact digest mismatch")
+    if manifest["platform"] == WINDOWS_WSL2_PLATFORM:
+        metadata = build.get("platform_metadata")
+        if not isinstance(metadata, dict) or not metadata.get("adapter_version"):
+            raise ContractError("windows bundle missing platform metadata")
+        verify_signing_input(bundle, manifest, build)
     if manifest["signature"]["status"] == "PENDING_AUTHORITY":
         if not allow_pending_signature:
             raise ContractError("bundle has no authority signature")
@@ -63,16 +126,7 @@ def verify(
         verify_release_signature(manifest, load_trust_root(trust_root_path))
 
     with tarfile.open(artifact, "r:gz") as archive:
-        names = set(archive.getnames())
-    root = f"citizen-{manifest['version']}"
-    required = {
-        f"{root}/install.sh",
-        f"{root}/scripts/install_service_linux.sh",
-        f"{root}/VERSION",
-    }
-    missing = sorted(required - names)
-    if missing:
-        raise ContractError(f"Linux installer paths missing from artifact: {missing}")
+        verify_artifact_layout(manifest, archive)
 
 
 def main() -> int:

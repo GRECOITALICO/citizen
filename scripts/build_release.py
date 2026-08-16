@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the deterministic Linux Citizen source-distribution artifact.
+"""Build deterministic Citizen source-distribution artifacts (Linux / Windows WSL2).
 
 This builder creates provenance records with a pending signature and a proposed
 release decision.  It never creates a tag, signs, publishes, or authorizes a
@@ -34,6 +34,11 @@ from citizen_seed.release_contract import (  # noqa: E402
 
 VERSION_PATTERN = re.compile(r'^(?:__version__|RUNTIME_VERSION) = "([^"]+)"$')
 COMPATIBILITY_PATTERN = re.compile(r'^COMPATIBILITY = "([^"]+)"$')
+LINUX_PLATFORM = "linux"
+WINDOWS_WSL2_PLATFORM = "windows-wsl2"
+BUNDLE_PATHS_FILE = ROOT / "release" / "windows-wsl2" / "bundle-paths.txt"
+ADAPTER_VERSION_FILE = ROOT / "release" / "windows-wsl2" / "ADAPTER_VERSION"
+SIGNING_INPUT_SCHEMA = "citizen-release-signing-input/v1"
 
 
 class BuildError(RuntimeError):
@@ -107,10 +112,104 @@ def write_json(path: Path, value: dict[str, Any]) -> None:
     path.write_bytes(canonical_json_bytes(value))
 
 
+def load_bundle_paths() -> list[Path]:
+    if not BUNDLE_PATHS_FILE.is_file():
+        raise BuildError(f"missing bundle manifest: {BUNDLE_PATHS_FILE}")
+    paths: list[Path] = []
+    for line in BUNDLE_PATHS_FILE.read_text(encoding="utf-8").splitlines():
+        item = line.strip()
+        if not item or item.startswith("#"):
+            continue
+        paths.append(Path(item))
+    if not paths:
+        raise BuildError("bundle manifest is empty")
+    return sorted(set(paths), key=lambda p: p.as_posix())
+
+
+def parse_porcelain_path(line: str) -> str:
+    line = line.rstrip("\r\n")
+    if len(line) < 3:
+        return ""
+    return line[2:].lstrip().strip('"')
+
+
+def require_windows_bundle_inputs(paths: list[Path]) -> None:
+    missing = [p for p in paths if not (ROOT / p).is_file()]
+    if missing:
+        raise BuildError(f"bundle paths missing: {missing[:5]}")
+    allowed = {p.as_posix() for p in paths}
+    outside_ok_prefixes = ("tests/",)
+    dirty = git("status", "--porcelain=v1", "--untracked-files=all").splitlines()
+    for line in dirty:
+        if not line.strip():
+            continue
+        path = parse_porcelain_path(line)
+        if not path:
+            continue
+        if path in allowed:
+            continue
+        if any(path.startswith(prefix) for prefix in outside_ok_prefixes):
+            continue
+        raise BuildError(f"source_dirty outside bundle: {path}")
+
+
+def adapter_version() -> str:
+    if not ADAPTER_VERSION_FILE.is_file():
+        raise BuildError(f"missing adapter version: {ADAPTER_VERSION_FILE}")
+    value = ADAPTER_VERSION_FILE.read_text(encoding="utf-8").strip()
+    if not value:
+        raise BuildError("adapter version must be non-empty")
+    return value
+
+
+def archive_bundle(
+    *,
+    destination: Path,
+    version: str,
+    source_epoch: int,
+    relative_paths: list[Path],
+) -> None:
+    root_name = f"citizen-{version}"
+    with destination.open("wb") as raw:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=source_epoch) as zipped:
+            with tarfile.open(fileobj=zipped, mode="w", format=tarfile.GNU_FORMAT) as archive:
+                for relative in relative_paths:
+                    source = ROOT / relative
+                    if not source.is_file():
+                        raise BuildError(f"bundle file missing: {relative}")
+                    info = tarfile.TarInfo(f"{root_name}/{relative.as_posix()}")
+                    source_stat = source.stat()
+                    info.size = source_stat.st_size
+                    info.mode = stat.S_IMODE(source_stat.st_mode)
+                    info.mtime = source_epoch
+                    info.uid = 0
+                    info.gid = 0
+                    info.uname = ""
+                    info.gname = ""
+                    with source.open("rb") as handle:
+                        archive.addfile(info, handle)
+
+
+def signing_input(
+    manifest: dict[str, Any],
+    *,
+    build_sidecar_digest: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": SIGNING_INPUT_SCHEMA,
+        "manifest_digest": manifest["manifest_digest"],
+        "signature_message_encoding": "ascii",
+        "signature_message": manifest["manifest_digest"],
+        "signature_algorithm": "Ed25519",
+        "status": "READY_FOR_AUTHORITY",
+        "notes": "Authority signs manifest_digest ASCII bytes; no KMS mutation in preflight.",
+    }
+    if build_sidecar_digest is not None:
+        payload["build_sidecar_digest"] = build_sidecar_digest
+    return payload
+
+
 def build(output_dir: Path, platform: str) -> dict[str, Any]:
-    require_clean_source()
-    if platform != "linux":
-        raise BuildError("platform_mismatch: Citizen 0.2 build contract is Linux-first")
     output_dir = output_dir.resolve()
     try:
         output_dir.relative_to(ROOT)
@@ -123,13 +222,38 @@ def build(output_dir: Path, platform: str) -> dict[str, Any]:
     source_tree = git("rev-parse", "HEAD^{tree}")
     source_epoch = int(git("show", "-s", "--format=%ct", "HEAD"))
     version, compatibility = source_versions()
-    artifact_name = f"citizen-{version}-{platform}.tar.gz"
+
+    if platform == LINUX_PLATFORM:
+        require_clean_source()
+        relative_paths = source_files()
+        artifact_name = f"citizen-{version}-{platform}.tar.gz"
+        build_command = (
+            "python3 scripts/build_release.py --platform linux --output-dir <outside-checkout>"
+        )
+        platform_metadata: dict[str, Any] = {}
+    elif platform == WINDOWS_WSL2_PLATFORM:
+        relative_paths = load_bundle_paths()
+        require_windows_bundle_inputs(relative_paths)
+        artifact_name = f"citizen-{version}-{platform}.tar.gz"
+        build_command = (
+            "python3 scripts/build_release.py --platform windows-wsl2 --output-dir <outside-checkout>"
+        )
+        platform_metadata = {
+            "adapter_version": adapter_version(),
+            "adapter_branch": "codex/citizen-windows-wsl2-adapter-v2",
+            "bundle_type": "windows-wsl2-archive",
+            "bundle_path_count": len(relative_paths),
+        }
+    else:
+        raise BuildError(f"unsupported platform: {platform}")
+
     output_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = output_dir / artifact_name
-    archive_source(
+    archive_bundle(
         destination=artifact_path,
         version=version,
         source_epoch=source_epoch,
+        relative_paths=relative_paths,
     )
     artifact_sha256 = sha256_prefixed(artifact_path.read_bytes())
     build_id_material = {
@@ -139,6 +263,8 @@ def build(output_dir: Path, platform: str) -> dict[str, Any]:
         "source_tree": source_tree,
         "version": version,
     }
+    if platform_metadata:
+        build_id_material["platform_metadata"] = platform_metadata
     build_id = "build-" + hashlib.sha256(
         canonical_json_bytes(build_id_material)
     ).hexdigest()[:20]
@@ -166,7 +292,7 @@ def build(output_dir: Path, platform: str) -> dict[str, Any]:
     build_sidecar = {
         "artifact_path": artifact_name,
         "artifact_sha256": artifact_sha256,
-        "build_command": "python3 scripts/build_release.py --platform linux --output-dir <outside-checkout>",
+        "build_command": build_command,
         "build_environment": {"SOURCE_DATE_EPOCH": str(source_epoch)},
         "build_id": build_id,
         "dependencies": ["Python >=3.11", "Python standard library", "Git"],
@@ -176,20 +302,45 @@ def build(output_dir: Path, platform: str) -> dict[str, Any]:
         "toolchain": toolchain,
         "version": version,
     }
+    if platform_metadata:
+        build_sidecar["platform_metadata"] = platform_metadata
+    build_sidecar_bytes = canonical_json_bytes(build_sidecar)
+    build_sidecar_digest = sha256_prefixed(build_sidecar_bytes)
     write_json(output_dir / "build.json", build_sidecar)
     write_json(output_dir / "release-manifest.json", manifest)
     write_json(output_dir / "release-decision.json", decision)
+    write_json(
+        output_dir / "signing-input.json",
+        signing_input(manifest, build_sidecar_digest=build_sidecar_digest),
+    )
+    bundle_sha256 = sha256_prefixed(
+        canonical_json_bytes(
+            {
+                "artifact_sha256": artifact_sha256,
+                "build_id": build_id,
+                "manifest_digest": manifest["manifest_digest"],
+                "platform": platform,
+                "platform_metadata": platform_metadata,
+            }
+        )
+    )
     return {
         "artifact": artifact_path,
         "artifact_sha256": artifact_sha256,
         "build_id": build_id,
+        "bundle_sha256": bundle_sha256,
         "manifest_digest": manifest["manifest_digest"],
+        "signing_input_ready": "YES",
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--platform", default="linux", choices=("linux",))
+    parser.add_argument(
+        "--platform",
+        default=LINUX_PLATFORM,
+        choices=(LINUX_PLATFORM, WINDOWS_WSL2_PLATFORM),
+    )
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
     try:
