@@ -191,6 +191,9 @@ def _write_bundle(path: Path, signed: dict) -> None:
                 "source_commit": rebuilt["source_commit"],
                 "source_tree": rebuilt["source_tree"],
                 "build_id": rebuilt["build_id"],
+                "version": rebuilt["version"],
+                "platform": rebuilt["platform"],
+                "toolchain": rebuilt["toolchain"],
             }
         ),
         encoding="utf-8",

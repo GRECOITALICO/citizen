@@ -27,6 +27,10 @@ from urllib.parse import urlparse
 
 OPS_ROOT = Path(__file__).resolve().parent
 SEED_ROOT = OPS_ROOT.parent
+sys.path.insert(0, str(SEED_ROOT / "runtime"))
+from citizen_seed import RUNTIME_VERSION  # noqa: E402
+from citizen_seed.update_engine import UpdateState  # noqa: E402
+
 EDGE = os.environ.get("CITIZEN_EDGE_URL", "https://conrrad.org").rstrip("/")
 HOME = Path(os.environ.get("CITIZEN_HOME", str(SEED_ROOT / ".citizen"))).expanduser()
 
@@ -274,6 +278,30 @@ def read_evolution_history() -> list[dict]:
     return out
 
 
+def parse_update_cli_output(out: str) -> dict:
+    text = (out or "").strip()
+    if not text:
+        return {}
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        for line in reversed(text.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    return json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+    return {}
+
+
+def latest_non_birth_evolution_version() -> str | None:
+    for row in reversed(read_evolution_history()):
+        if row.get("kind") != "birth" and row.get("version"):
+            return str(row["version"]).lstrip("v")
+    return None
+
+
 def append_evolution(entry: dict) -> dict:
     """Append-only — history only grows; never deletes."""
     path = evolution_path()
@@ -346,6 +374,9 @@ def scan_local_update_candidate() -> dict | None:
         if cand.get("citizen_id") and current.get("citizen_id"):
             if cand["citizen_id"] != current["citizen_id"]:
                 continue
+        # Match UpdateEngine guard — asset packages must target the running runtime.
+        if cand.get("runtime_version") != RUNTIME_VERSION:
+            continue
         if (
             cand.get("asset_version") == current.get("asset_version")
             and cand.get("release") == current.get("release")
@@ -612,40 +643,42 @@ def sync_cycle() -> dict:
 
     # 4. Update Check + 5. Synchronization via existing Runtime CLI (no Runtime edits)
     code, out = run_cli("update")
-    phase("update_check", True, "invoked citizen_seed update")
+    update_payload = parse_update_cli_output(out)
+    update_state = str(update_payload.get("state") or "")
+    updated = update_state == UpdateState.UPDATED.value
+    phase("update_check", True, f"state={update_state or 'unknown'}")
     sync_ok = code == 0
     phase("synchronization", sync_ok, out[-400:] if out else f"exit={code}")
 
     connected = ok
     set_connection(connected)
 
-    # Evolutionary growth evidence after successful Sync
     ver = seed_version()
-    if avail_before.get("update_available") and avail_before.get("latest_evolution"):
-        # Adopt published evolution version when update was pending
-        cand = str(avail_before["latest_evolution"]).lstrip("v")
-        if cand and cand not in {"available", "—"}:
-            ver = cand
-            set_current_version(ver)
     evolution_row = None
-    if sync_ok:
-        evolution_row = append_evolution(
-            {
-                "kind": "sync_evolution",
-                "version": ver,
-                "label": ver,
-                "ts": utc_now(),
-                "message": "Evolution recorded after successful SYNC",
-                "update_was_available": bool(avail_before.get("update_available")),
-            }
-        )
+    if updated:
+        meta = current_manifest_meta()
+        new_ver = str(meta.get("citizen_version") or ver).lstrip("v")
+        if new_ver:
+            set_current_version(new_ver)
+            ver = new_ver
+        if latest_non_birth_evolution_version() != ver:
+            evolution_row = append_evolution(
+                {
+                    "kind": "sync_evolution",
+                    "version": ver,
+                    "label": ver,
+                    "ts": utc_now(),
+                    "message": "Evolution recorded after successful SYNC",
+                    "update_was_available": bool(avail_before.get("update_available")),
+                }
+            )
+            emit_event(
+                "evolution",
+                f"Evolution {ver}",
+                version=ver,
+                evidence_id=evolution_row.get("evidence_id"),
+            )
         clear_pending_update()
-        emit_event(
-            "evolution",
-            f"Evolution {ver}",
-            version=ver,
-            evidence_id=evolution_row.get("evidence_id"),
-        )
 
     sync_rec = {
         "ts": utc_now(),
@@ -661,12 +694,15 @@ def sync_cycle() -> dict:
         "SYNC finished",
         connected=connected,
         alive=True,
-        update_available=False if sync_ok else avail_before.get("update_available"),
+        update_available=False if updated else avail_before.get("update_available"),
         phases=[p["phase"] for p in result["phases"]],
     )
     result["cluster_connection"] = "Connected" if connected else "Offline"
     result["alive_status"] = "Alive"
-    result["update_available"] = False if sync_ok else bool(avail_before.get("update_available"))
+    avail_after = update_availability()
+    result["update_available"] = (
+        False if updated else bool(avail_after.get("update_available"))
+    )
     result["current_version"] = ver
     result["evolution"] = evolution_row
     return result
