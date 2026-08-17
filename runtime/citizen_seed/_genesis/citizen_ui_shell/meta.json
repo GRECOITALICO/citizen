@@ -1,7 +1,7 @@
 {
   "asset_id": "citizen_ui_shell",
+  "content_hash": "603705b262a2341c3d027df8b597e6c4db4d45f2fbb5511f72458462dde0553f",
   "kind": "citizen_ui",
-  "version": "1",
-  "content_hash": "pending",
-  "signature": "pending"
+  "signature": "7b906afebb4dbc0fd1d098c32f70ef67d29a2a2249739341b076d07e8d1a594c",
+  "version": "2"
 }
