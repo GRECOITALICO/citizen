@@ -4,12 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Citizen Birth Observatory</title>
+  <link rel="icon" type="image/png" href="/logo.png" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <main>
+    <header id="header">
+      <img id="logo" src="/logo.png" alt="CONRRAD" width="64" height="64" />
+      <div>
+        <h1 class="brand">CITIZEN BIRTH OBSERVATORY</h1>
+        <span id="version-badge" class="badge">—</span>
+      </div>
+    </header>
+
     <section id="identity">
-      <h1>IDENTITY</h1>
+      <h2>IDENTITY</h2>
       <dl>
         <dt>Citizen ID</dt>
         <dd id="citizen-id">—</dd>
@@ -24,19 +33,19 @@
     </section>
 
     <section id="sync">
-      <h1>SYNC</h1>
+      <h2>SYNC</h2>
       <button id="sync-btn" type="button" class="green" disabled>Current</button>
     </section>
 
     <section id="journal">
-      <h1>CITIZEN LIFE JOURNAL</h1>
+      <h2>CITIZEN LIFE JOURNAL</h2>
       <div id="timeline" class="timeline"></div>
       <pre id="bio"></pre>
       <div id="node-detail" class="node-detail hidden"></div>
     </section>
 
     <section id="terminal">
-      <h1>TERMINAL</h1>
+      <h2>TERMINAL</h2>
       <pre id="term"></pre>
     </section>
   </main>

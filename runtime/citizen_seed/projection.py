@@ -46,11 +46,23 @@ class ProjectionEngine:
                 continue
             payload = self.loader.load_payload(a["content_hash"])
             name = f"{ref.kind}__{ref.asset_id}"
-            # JSON payloads preferred
+            
             try:
                 data = json.loads(payload.decode("utf-8"))
                 fname = f"{name}.json"
                 self._write_json(fname, data)
+                
+                # Special handling for UI: extract to a physical folder
+                if ref.kind == "citizen_ui":
+                    import base64
+                    ui_dir = self.out_dir / "ui"
+                    ui_dir.mkdir(parents=True, exist_ok=True)
+                    for k, v in data.items():
+                        if isinstance(v, str) and v.startswith("base64:"):
+                            (ui_dir / k).write_bytes(base64.b64decode(v[7:]))
+                        elif isinstance(v, str):
+                            (ui_dir / k).write_text(v, encoding="utf-8")
+                            
             except (UnicodeDecodeError, json.JSONDecodeError):
                 fname = f"{name}.bin"
                 (self.out_dir / fname).write_bytes(payload)

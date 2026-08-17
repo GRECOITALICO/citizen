@@ -29,13 +29,56 @@ main {
   gap: 1.5rem;
 }
 
+#header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.5rem 0;
+}
+
+#logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: contain;
+  background: #fff;
+  padding: 4px;
+  box-shadow: 0 0 20px rgba(61, 143, 122, 0.15);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+#logo:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 30px rgba(61, 143, 122, 0.3);
+}
+
+.brand {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  border-radius: 3px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
 section {
   background: var(--panel);
   border: 1px solid var(--line);
   padding: 1.25rem 1.5rem;
 }
 
-h1 {
+h2 {
   margin: 0 0 1rem;
   font-size: 0.72rem;
   letter-spacing: 0.14em;
@@ -67,6 +110,11 @@ dd { margin: 0; word-break: break-all; }
   font-size: 1.15rem;
   letter-spacing: 0.04em;
   margin-top: 0;
+  transition: background 0.3s ease, transform 0.1s ease;
+}
+
+#sync-btn:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 #export-btn {
@@ -75,6 +123,11 @@ dd { margin: 0; word-break: break-all; }
   background: #2a3538;
   font-size: 0.85rem;
   letter-spacing: 0.06em;
+  transition: background 0.2s ease;
+}
+
+#export-btn:hover:not(:disabled) {
+  background: #354245;
 }
 
 #sync-btn.green { background: var(--green); }

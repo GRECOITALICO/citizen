@@ -734,14 +734,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         web = seed_root() / "ui"
+        proj_ui = ServerGlobals.HOME / "projection" / "ui"
+
+        def _get_file(name: str) -> Path:
+            return proj_ui / name if (proj_ui / name).is_file() else web / name
+
         if path in {"/", "/index.html"}:
-            return self._send(200, (web / "index.html").read_bytes(), "text/html; charset=utf-8")
+            return self._send(200, _get_file("index.html").read_bytes(), "text/html; charset=utf-8")
         if path == "/style.css":
-            return self._send(200, (web / "style.css").read_bytes(), "text/css")
+            return self._send(200, _get_file("style.css").read_bytes(), "text/css")
         if path == "/app.js":
-            return self._send(200, (web / "app.js").read_bytes(), "application/javascript")
-        if path == "/logo.png":
-            logo = web / "logo.png"
+            return self._send(200, _get_file("app.js").read_bytes(), "application/javascript")
+        if path in {"/logo.png", "/favicon.png"}:
+            logo = _get_file("logo.png")
             if logo.is_file():
                 return self._send(200, logo.read_bytes(), "image/png")
             return self.send_error(404)
