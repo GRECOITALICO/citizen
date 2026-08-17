@@ -5,9 +5,7 @@ Requirements: Python **3.11+**, a POSIX shell, network only if cloning from remo
 ## Third-party Birth
 
 ```bash
-git clone <citizen-seed-repository-url>
-cd citizen-seed
-./install.sh
+curl -sSL https://raw.githubusercontent.com/GRECOITALICO/citizen/main/install.sh | bash
 ```
 
 This runs, without further prompts:

@@ -5,9 +5,7 @@
 Public, self-contained seed. No private founder environment required.
 
 ```bash
-git clone <url>
-cd citizen-seed
-./install.sh
+curl -sSL https://raw.githubusercontent.com/GRECOITALICO/citizen/main/install.sh | bash
 ```
 
 → Birth → permanent OS service → living UI `http://127.0.0.1:3434/`
