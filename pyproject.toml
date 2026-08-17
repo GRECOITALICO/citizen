@@ -1,6 +1,6 @@
 [project]
 name = "conrrad-citizen"
-version = "0.2.0"
+version = "0.2.5"
 description = "Citizen — Authentic Digital Organism"
 requires-python = ">=3.11"
 readme = "README.md"
@@ -15,3 +15,11 @@ citizen-seed = "citizen_seed.__main__:main"
 [tool.setuptools.packages.find]
 where = ["runtime"]
 include = ["citizen_seed*"]
+
+[tool.setuptools.package-data]
+citizen_seed = [
+    "_genesis/*/meta.json",
+    "_genesis/*/payload",
+    "_genesis/publisher.secret.example",
+]
+

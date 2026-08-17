@@ -74,7 +74,7 @@ def outside_llm_report(home: Path) -> dict[str, Any]:
         "projection": paths["projection"].is_dir() and any(paths["projection"].iterdir()),
         "assets": paths["assets"].is_dir() and any(paths["assets"].iterdir()),
     }
-    scan = _scan_runtime_for_llm_imports(seed_root() / "runtime" / "citizen_seed")
+    scan = _scan_runtime_for_llm_imports(seed_root())
     living_outside = sum(1 for v in planes.values() if v)
     return {
         **OUTSIDE_LLM_FACTS,
@@ -189,6 +189,9 @@ def destroy_citizen(*, home: Path, export_first: bool = True) -> dict[str, Any]:
     result: dict[str, Any] = {"home": str(home), "destroyed": False}
     if export_first and (home / "identity" / "identity.json").is_file():
         result["export"] = export_birth_package(home=home)
+    from .systemd_manager import SystemdManager
+    SystemdManager.uninstall_user_service()
+    
     if home.exists():
         shutil.rmtree(home)
         result["destroyed"] = True

@@ -1,0 +1,3 @@
+[console_scripts]
+citizen = citizen_seed.__main__:main
+citizen-seed = citizen_seed.__main__:main

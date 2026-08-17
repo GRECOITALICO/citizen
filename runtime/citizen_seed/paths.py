@@ -7,8 +7,8 @@ from pathlib import Path
 
 
 def seed_root() -> Path:
-    """Repo root: citizen-seed/ (parent of runtime/)."""
-    return Path(__file__).resolve().parents[2]
+    """Package root: the citizen_seed package directory itself."""
+    return Path(__file__).resolve().parent
 
 
 def citizen_home(root: Path | None = None) -> Path:
@@ -17,7 +17,7 @@ def citizen_home(root: Path | None = None) -> Path:
     env = os.environ.get("CITIZEN_HOME")
     if env:
         return Path(env).resolve()
-    return (seed_root() / ".citizen").resolve()
+    return (Path.home() / ".citizen").resolve()
 
 
 def layout(home: Path) -> dict[str, Path]:

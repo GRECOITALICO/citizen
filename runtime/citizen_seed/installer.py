@@ -20,6 +20,7 @@ from .projection import ProjectionEngine
 from .telemetry import emit as tel
 from .terminal import line as term, write_sync_state
 from .timeline import append_node
+from .systemd_manager import SystemdManager
 
 
 class BootstrapDisarmed(RuntimeError):
@@ -46,8 +47,7 @@ def install(
     """One Birth. Refuses if Bootstrap disarmed or identity exists."""
     t0 = time.time()
     home = Path(home).resolve()
-    root = seed_root()
-    assets_pkg = root / "assets"
+    pkg_dir = seed_root()  # citizen_seed package directory
     paths = ensure_layout(home)
 
     def T(msg: str) -> None:
@@ -84,7 +84,7 @@ def install(
     # —— Bootstrap ——
     T("Awakening the bootstrap...")
     tel(paths["telemetry"], level="info", event="birth.start", home=str(home))
-    secret_path = _ensure_publisher_secret(assets_pkg)
+    secret_path = _ensure_publisher_secret(pkg_dir / "_genesis")
     secret = load_publisher_secret(secret_path)
     (paths["runtime"] / "publisher.secret").write_bytes(secret)
     (paths["runtime"] / "RUNTIME_VERSION").write_text(RUNTIME_VERSION + "\n", encoding="utf-8")
@@ -186,7 +186,7 @@ def install(
     # —— Assets + Manifest ——
     T("Gathering what I will become...")
     loader = AssetLoader(paths["assets"], secret)
-    genesis = assets_pkg / "genesis"
+    genesis = pkg_dir / "_genesis"
     t_assets = time.time()
     entries = install_from_genesis_dir(loader, genesis)
     dur_assets = (time.time() - t_assets) * 1000
@@ -324,6 +324,10 @@ def install(
         evidence_types=["BIRTH_COMPLETE"],
         evidence_hashes=[ev_c.get("content_hash", "")],
     )
+    
+    T("Installing background service...")
+    SystemdManager.install_user_service()
+    
     T("Citizen is alive.")
 
     return {
