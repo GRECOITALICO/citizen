@@ -29,9 +29,36 @@ def source_seed() -> Path:
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[2]
 
+def nuclear_clean(dest: Path, home: Path) -> None:
+    # Kill any python process on port 3434
+    try:
+        out = subprocess.check_output(["netstat", "-ano"], text=True, errors="ignore")
+        for line in out.splitlines():
+            if "3434" in line and "LISTENING" in line:
+                parts = line.split()
+                if len(parts) >= 5:
+                    pid = parts[-1]
+                    subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+    except Exception:
+        pass
+        
+    if dest.exists():
+        try:
+            shutil.rmtree(dest)
+        except Exception:
+            pass
+    if home.exists():
+        try:
+            shutil.rmtree(home)
+        except Exception:
+            pass
+
 def copy_tree(src: Path, dst: Path) -> None:
     if dst.exists():
-        shutil.rmtree(dst)
+        try:
+            shutil.rmtree(dst)
+        except Exception:
+            pass
     shutil.copytree(
         src,
         dst,
@@ -47,7 +74,7 @@ def write_autostart(seed: Path, home: Path) -> None:
         "set CITIZEN_CLUSTER_ROOT_URL=https://conrrad.org\r\n"
         f"set PYTHONPATH={seed};{seed}\\runtime\r\n"
         f'cd /d "{seed}"\r\n'
-        f'start "CitizenService" /MIN "{py}" -m citizen_seed boot --home "{home}"\r\n',
+        f'start "CitizenService" /MIN "{py}" -m citizen_seed serve --port 3434 --home "{home}"\r\n',
         encoding="utf-8",
     )
     run_cmd = f'"{bat}"'
@@ -85,13 +112,21 @@ def main() -> int:
     seed_src = source_seed()
     dest = install_dir()
     home = citizen_home()
+    nuclear_clean(dest, home)
     copy_tree(seed_src, dest)
     os.environ["PYTHONPATH"] = str(dest) + os.pathsep + str(dest / "runtime")
     birth(dest, home)
     write_autostart(dest, home)
     
     bat = dest / "start_citizen.bat"
-    subprocess.Popen(["cmd", "/c", str(bat)], cwd=str(dest))
+    subprocess.Popen(["cmd", "/c", str(bat)], cwd=str(dest), creationflags=subprocess.CREATE_NO_WINDOW)
+    
+    # Open browser
+    import time
+    time.sleep(2)
+    import webbrowser
+    webbrowser.open("http://127.0.0.1:3434/")
+    
     return 0
 
 if __name__ == "__main__":
