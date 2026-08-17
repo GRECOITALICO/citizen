@@ -15,6 +15,11 @@ DEFAULT_UI_HOST = "127.0.0.1"
 DEFAULT_UI_PORT = 3434
 WSL_CONF_PATH = "/etc/wsl.conf"
 MARKER_DIR = "/home/citizen/.config/conrrad-citizen-wsl2"
+DEFAULT_LINUX_INSTALL_ROOT = "/opt/conrrad-citizen"
+BOOTSTRAPPER_VERSION = "0.2.0-wsl2-bootstrapper.1"
+INSTALLER_BASENAME = "CitizenSetup-0.2.0.exe"
+AUTOSTART_TASK = "CONRRAD-Citizen-WSL2-Autostart"
+WINDOWS_PROGRAMDATA = r"C:\ProgramData\CONRRAD\Citizen"
 
 
 @dataclass(frozen=True)
@@ -76,3 +81,30 @@ def is_systemd_pid1(status_text: str) -> bool:
 def marker_path(name: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
     return f"{MARKER_DIR}/{safe}.ok"
+
+
+def bootstrapper_payload_linux_root() -> str:
+    return DEFAULT_LINUX_INSTALL_ROOT
+
+
+def uninstall_must_not_touch() -> tuple[str, ...]:
+    """Distros/files uninstall must never remove implicitly."""
+    return (
+        "Ubuntu",
+        "Ubuntu-22.04",
+        "Ubuntu-24.04",
+        "docker-desktop",
+        "docker-desktop-data",
+    )
+
+
+def required_bootstrapper_windows_files() -> tuple[str, ...]:
+    return (
+        "windows/bootstrapper/Detect-CitizenPrerequisites.ps1",
+        "windows/bootstrapper/Install-CitizenBootstrap.ps1",
+        "windows/bootstrapper/Uninstall-CitizenWsl2.ps1",
+        "windows/bootstrapper/citizen-setup.nsi",
+        "windows/Install-CitizenWsl2.ps1",
+        "windows/Launch-CitizenUI.ps1",
+        "windows/Register-CitizenAutoStart.ps1",
+    )

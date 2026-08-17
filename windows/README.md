@@ -15,7 +15,11 @@ Windows boot
 
 Launcher (`Launch-CitizenUI.ps1`) opens the existing UI in the default browser. No Windows-native Citizen runtime.
 
-## Quick start (real Windows — next mission)
+## End-user installer
+
+`CitizenSetup-0.2.0.exe` (see [docs/windows/WINDOWS_BOOTSTRAPPER.md](../docs/windows/WINDOWS_BOOTSTRAPPER.md)) wraps these scripts. Double-click; no Git/Python/cloud CLIs on Windows.
+
+## Quick start (scripts — operators)
 
 1. Clone this repository **inside the WSL Linux filesystem** (not `/mnt/c`).
 2. From elevated PowerShell on Windows:

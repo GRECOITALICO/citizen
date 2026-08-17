@@ -17,6 +17,7 @@ assets/updates/seed-update-1/assets/6086c7d23bb26bb4b583ab80e5dd43f2401125126239
 assets/updates/seed-update-1/assets/aa0b574925f3ae17798171ffa7529e2be939c43704bb2b45bc6037c22c38989c/meta.json
 assets/updates/seed-update-1/assets/aa0b574925f3ae17798171ffa7529e2be939c43704bb2b45bc6037c22c38989c/payload
 assets/updates/seed-update-1/manifest.json
+docs/windows/WINDOWS_BOOTSTRAPPER.md
 docs/windows/WINDOWS_INSTALL.md
 docs/windows/WINDOWS_UNINSTALL.md
 docs/windows/WINDOWS_UPGRADE.md
@@ -57,6 +58,7 @@ runtime/citizen_seed/ui_server.py
 runtime/citizen_seed/update_engine.py
 runtime/citizen_seed/updater.py
 scripts/build_release.py
+scripts/build_windows_bootstrapper.py
 scripts/install_service_linux.sh
 scripts/verify_release_bundle.py
 scripts/verify_service.sh
@@ -65,6 +67,10 @@ windows/Install-CitizenWsl2.ps1
 windows/Launch-CitizenUI.ps1
 windows/README.md
 windows/Register-CitizenAutoStart.ps1
+windows/bootstrapper/Detect-CitizenPrerequisites.ps1
+windows/bootstrapper/Install-CitizenBootstrap.ps1
+windows/bootstrapper/Uninstall-CitizenWsl2.ps1
+windows/bootstrapper/citizen-setup.nsi
 windows/wsl2/adapter.py
 windows/wsl2/configure-systemd.sh
 windows/wsl2/defaults.env
