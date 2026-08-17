@@ -17,9 +17,19 @@
         <p class="breath">A living organism · Seed <span id="citizen_seed_version">—</span></p>
       </div>
       <div class="header-side">
-        <span id="gen_badge" class="badge gen-seed" title="Generation">SEED 0.1</span>
-        <div class="port-pill" title="Configurable UI port">
-          Port <strong id="ui_port">—</strong>
+        <div class="sync-container">
+          <p id="update_banner" class="update-banner" hidden>Update Available</p>
+          <button type="button" id="sync_btn" class="sync" aria-label="SYNC with CONRRAD">
+            <span class="sync-word" id="sync_word">SYNC</span>
+            <span class="sync-ver" id="current_version_label">v0.2.0</span>
+          </button>
+          <p id="sync_msg" class="sync-msg" hidden></p>
+        </div>
+        <div class="meta-badges">
+          <span id="gen_badge" class="badge gen-seed" title="Generation">SEED 0.1</span>
+          <div class="port-pill" title="Configurable UI port">
+            Port <strong id="ui_port">—</strong>
+          </div>
         </div>
       </div>
     </header>
@@ -66,15 +76,7 @@
       </dl>
     </section>
 
-    <section class="action">
-      <p id="update_banner" class="update-banner" hidden>Update Available</p>
-      <button type="button" id="sync_btn" class="sync" aria-label="SYNC with CONRRAD">
-        <span class="sync-word" id="sync_word">SYNC</span>
-        <span class="sync-ver" id="current_version_label">v0.1.0</span>
-      </button>
-      <p class="sync-note">Center of the relationship with CONRRAD</p>
-      <p id="sync_msg" class="sync-msg" hidden></p>
-    </section>
+
 
     <section class="evo-history" aria-label="Evolution History">
       <h2>Evolution History</h2>

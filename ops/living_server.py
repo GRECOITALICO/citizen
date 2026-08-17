@@ -27,6 +27,10 @@ from urllib.parse import urlparse
 
 OPS_ROOT = Path(__file__).resolve().parent
 SEED_ROOT = OPS_ROOT.parent
+sys.path.insert(0, str(SEED_ROOT / "runtime"))
+from citizen_seed import RUNTIME_VERSION  # noqa: E402
+from citizen_seed.update_engine import UpdateState  # noqa: E402
+
 EDGE = os.environ.get("CITIZEN_EDGE_URL", "https://conrrad.org").rstrip("/")
 HOME = Path(os.environ.get("CITIZEN_HOME", str(SEED_ROOT / ".citizen"))).expanduser()
 
@@ -207,7 +211,7 @@ def seed_version() -> str:
         if v:
             return v.lstrip("v")
     vf = SEED_ROOT / "VERSION"
-    return vf.read_text(encoding="utf-8").strip() if vf.is_file() else "0.1.0"
+    return vf.read_text(encoding="utf-8").strip() if vf.is_file() else "0.2.0"
 
 
 def set_current_version(ver: str) -> None:
@@ -250,7 +254,7 @@ def evolutionary_line(ver: str) -> dict:
         }
     return {
         "line": "citizen_seed_0_1",
-        "label": "Citizen Seed 0.1",
+        "label": "Citizen 0.2",
         "sync_color": "#4db8ff",
         "badge": "SEED 0.1",
         "badge_class": "gen-seed",
@@ -272,6 +276,30 @@ def read_evolution_history() -> list[dict]:
         except json.JSONDecodeError:
             continue
     return out
+
+
+def parse_update_cli_output(out: str) -> dict:
+    text = (out or "").strip()
+    if not text:
+        return {}
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        for line in reversed(text.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    return json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+    return {}
+
+
+def latest_non_birth_evolution_version() -> str | None:
+    for row in reversed(read_evolution_history()):
+        if row.get("kind") != "birth" and row.get("version"):
+            return str(row["version"]).lstrip("v")
+    return None
 
 
 def append_evolution(entry: dict) -> dict:
@@ -305,7 +333,7 @@ def ensure_birth_evolution() -> None:
         }
     )
     # Seed line: current package version as first living generation marker
-    ver = (SEED_ROOT / "VERSION").read_text(encoding="utf-8").strip() if (SEED_ROOT / "VERSION").is_file() else "0.1.0"
+    ver = (SEED_ROOT / "VERSION").read_text(encoding="utf-8").strip() if (SEED_ROOT / "VERSION").is_file() else "0.2.0"
     if not any(h.get("version") == ver and h.get("kind") != "birth" for h in read_evolution_history()):
         append_evolution(
             {
@@ -328,6 +356,26 @@ def current_manifest_meta() -> dict:
         return {}
 
 
+def _project_web_assets() -> None:
+    """After a successful update, copy web/* assets from store → ops/web/ directory."""
+    meta = current_manifest_meta()
+    web = OPS_ROOT / "web"
+    for entry in meta.get("assets", []):
+        asset_id = entry.get("asset_id", "")
+        content_hash = entry.get("content_hash", "")
+        if not asset_id.startswith("web/") or not content_hash:
+            continue
+        payload = HOME / "assets" / content_hash / "payload"
+        if not payload.is_file():
+            continue
+        rel = asset_id[len("web/"):]  # e.g. "logo.png"
+        dest = web / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy2(str(payload), str(dest))
+        emit_event("asset_projected", f"Projected {asset_id}", asset_id=asset_id)
+
+
 def scan_local_update_candidate() -> dict | None:
     """Ops-side quiet scan of assets/updates (no Runtime edits)."""
     updates = SEED_ROOT / "assets" / "updates"
@@ -346,6 +394,9 @@ def scan_local_update_candidate() -> dict | None:
         if cand.get("citizen_id") and current.get("citizen_id"):
             if cand["citizen_id"] != current["citizen_id"]:
                 continue
+        # Match UpdateEngine guard — asset packages must target the running runtime.
+        if cand.get("runtime_version") != RUNTIME_VERSION:
+            continue
         if (
             cand.get("asset_version") == current.get("asset_version")
             and cand.get("release") == current.get("release")
@@ -523,6 +574,7 @@ def wake() -> dict:
     report["ready"] = True
     (ops_dir() / "LAST_WAKE.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     ensure_birth_evolution()
+    _project_web_assets()  # Ensure web dir reflects current manifest on wake
     emit_event(
         "wake",
         "Citizen Awake",
@@ -611,41 +663,45 @@ def sync_cycle() -> dict:
     phase("telemetry_upload", t_ok, t_detail or "queued locally")
 
     # 4. Update Check + 5. Synchronization via existing Runtime CLI (no Runtime edits)
-    code, out = run_cli("update")
-    phase("update_check", True, "invoked citizen_seed update")
+    code, out = run_cli("update", "--updates", str(SEED_ROOT / "assets" / "updates"))
+    update_payload = parse_update_cli_output(out)
+    update_state = str(update_payload.get("state") or "")
+    updated = update_state == UpdateState.UPDATED.value
+    phase("update_check", True, f"state={update_state or 'unknown'}")
     sync_ok = code == 0
     phase("synchronization", sync_ok, out[-400:] if out else f"exit={code}")
 
     connected = ok
     set_connection(connected)
 
-    # Evolutionary growth evidence after successful Sync
     ver = seed_version()
-    if avail_before.get("update_available") and avail_before.get("latest_evolution"):
-        # Adopt published evolution version when update was pending
-        cand = str(avail_before["latest_evolution"]).lstrip("v")
-        if cand and cand not in {"available", "—"}:
-            ver = cand
-            set_current_version(ver)
     evolution_row = None
-    if sync_ok:
-        evolution_row = append_evolution(
-            {
-                "kind": "sync_evolution",
-                "version": ver,
-                "label": ver,
-                "ts": utc_now(),
-                "message": "Evolution recorded after successful SYNC",
-                "update_was_available": bool(avail_before.get("update_available")),
-            }
-        )
+    if updated:
+        meta = current_manifest_meta()
+        new_ver = str(meta.get("citizen_version") or ver).lstrip("v")
+        if new_ver:
+            set_current_version(new_ver)
+            ver = new_ver
+        if latest_non_birth_evolution_version() != ver:
+            evolution_row = append_evolution(
+                {
+                    "kind": "sync_evolution",
+                    "version": ver,
+                    "label": ver,
+                    "ts": utc_now(),
+                    "message": "Evolution recorded after successful SYNC",
+                    "update_was_available": bool(avail_before.get("update_available")),
+                }
+            )
+            emit_event(
+                "evolution",
+                f"Evolution {ver}",
+                version=ver,
+                evidence_id=evolution_row.get("evidence_id"),
+            )
         clear_pending_update()
-        emit_event(
-            "evolution",
-            f"Evolution {ver}",
-            version=ver,
-            evidence_id=evolution_row.get("evidence_id"),
-        )
+        # Project web assets from store → ops/web/ so UI reflects the evolution
+        _project_web_assets()
 
     sync_rec = {
         "ts": utc_now(),
@@ -661,12 +717,15 @@ def sync_cycle() -> dict:
         "SYNC finished",
         connected=connected,
         alive=True,
-        update_available=False if sync_ok else avail_before.get("update_available"),
+        update_available=False if updated else avail_before.get("update_available"),
         phases=[p["phase"] for p in result["phases"]],
     )
     result["cluster_connection"] = "Connected" if connected else "Offline"
     result["alive_status"] = "Alive"
-    result["update_available"] = False if sync_ok else bool(avail_before.get("update_available"))
+    avail_after = update_availability()
+    result["update_available"] = (
+        False if updated else bool(avail_after.get("update_available"))
+    )
     result["current_version"] = ver
     result["evolution"] = evolution_row
     return result
