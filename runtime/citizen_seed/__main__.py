@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     sv = sub.add_parser("serve", help="Birth Observatory UI")
     add_home(sv)
     sv.add_argument("--host", default="127.0.0.1")
-    sv.add_argument("--port", type=int, default=8787)
+    sv.add_argument("--port", type=int, default=3434)
 
     ex = sub.add_parser("export-birth", help="Export Birth Package")
     add_home(ex)

@@ -1,0 +1,30 @@
+{
+  "schema": "citizen.news.v1",
+  "updated_at": "2026-08-13",
+  "items": [
+    {
+      "id": "citizen-public-release",
+      "status": "IN DEVELOPMENT",
+      "category": "Product",
+      "title": "Citizen is becoming a public developer product",
+      "summary": "The next release line is focused on making Citizen easy to install, professional to use, and continuously synchronizable.",
+      "body": "This page intentionally distinguishes shipped behavior from work in development and future vision. Citizen's operational state remains evidence-first and independent of the developer checkout."
+    },
+    {
+      "id": "citizen-reboot-proof",
+      "status": "SHIPPED",
+      "category": "Validation",
+      "title": "Citizen survives a real host reboot",
+      "summary": "LOCAL-004 independently proved service restart, identity persistence, evidence persistence, Node recovery and authority-boundary behavior.",
+      "body": "The validated Citizen retained its identity and evidence across a real host reboot and re-established its Node connection automatically."
+    },
+    {
+      "id": "citizen-roadmap",
+      "status": "VISION",
+      "category": "Roadmap",
+      "title": "From local Citizen to a governed asset organism",
+      "summary": "Future releases will expand the Citizen while preserving the core boundary: local execution and evidence, remote governance.",
+      "body": "The future direction includes richer asset visibility, public demonstrations, educational material and a broader governed asset model."
+    }
+  ]
+}

@@ -31,6 +31,12 @@ runtime/citizen_seed/_genesis/status_seed/meta.json
 runtime/citizen_seed/_genesis/status_seed/payload
 runtime/citizen_seed/_genesis/website_shell/meta.json
 runtime/citizen_seed/_genesis/website_shell/payload
+runtime/citizen_seed/ui/NEWS_DESIGN.md
+runtime/citizen_seed/ui/app.js
+runtime/citizen_seed/ui/index.html
+runtime/citizen_seed/ui/logo.png
+runtime/citizen_seed/ui/news.json
+runtime/citizen_seed/ui/style.css
 runtime/conrrad_citizen.egg-info/PKG-INFO
 runtime/conrrad_citizen.egg-info/SOURCES.txt
 runtime/conrrad_citizen.egg-info/dependency_links.txt

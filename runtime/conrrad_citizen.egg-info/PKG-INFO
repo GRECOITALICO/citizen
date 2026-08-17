@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: conrrad-citizen
-Version: 0.2.5
+Version: 0.2.7
 Summary: Citizen — Authentic Digital Organism
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
@@ -14,9 +14,7 @@ Dynamic: license-file
 Public, self-contained seed. No private founder environment required.
 
 ```bash
-git clone <url>
-cd citizen-seed
-./install.sh
+curl -sSL https://raw.githubusercontent.com/GRECOITALICO/citizen/main/install.sh | bash
 ```
 
 → Birth → permanent OS service → living UI `http://127.0.0.1:3434/`

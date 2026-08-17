@@ -17,7 +17,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart={executable} -m citizen_seed boot
+ExecStart={executable} -m citizen_seed serve --port 3434
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1

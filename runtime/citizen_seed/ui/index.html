@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Citizen Console</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true"></div>
+  <main class="organism">
+    <header class="identity-band">
+      <img class="logo" src="/logo.png" alt="CONRRAD" width="72" height="72" />
+      <div class="titles">
+        <p class="brand">CONRRAD</p>
+        <h1>Citizen Console</h1>
+        <p class="breath">A living organism · Seed <span id="citizen_seed_version">—</span></p>
+      </div>
+      <div class="header-side">
+        <div class="sync-container">
+          <p id="update_banner" class="update-banner" hidden>Update Available</p>
+          <button type="button" id="sync_btn" class="sync" aria-label="SYNC with CONRRAD">
+            <span class="sync-word" id="sync_word">SYNC</span>
+            <span class="sync-ver" id="current_version_label">v0.2.0</span>
+          </button>
+          <p id="sync_msg" class="sync-msg" hidden></p>
+        </div>
+        <div class="meta-badges">
+          <span id="gen_badge" class="badge gen-seed" title="Generation">SEED 0.1</span>
+          <div class="port-pill" title="Configurable UI port">
+            Port <strong id="ui_port">—</strong>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="vitals" aria-label="Life and connection">
+      <div class="vital alive" id="vital_alive">
+        <span class="label">ALIVE</span>
+        <span class="value" id="alive_status">—</span>
+        <span class="hint">Life of the organism</span>
+      </div>
+      <div class="vital connected" id="vital_connected">
+        <span class="label">CONNECTED</span>
+        <span class="value" id="cluster_connection_status">—</span>
+        <span class="hint">Cluster link · Offline ≠ Dead</span>
+      </div>
+    </section>
+
+    <section class="presence" aria-label="Citizen presence">
+      <dl>
+        <dt>Citizen ID</dt><dd id="citizen_id">—</dd>
+        <dt>Birth Hash</dt><dd id="birth_hash">—</dd>
+        <dt>Birth Timestamp</dt><dd id="birth_timestamp">—</dd>
+        <dt>Citizen Age</dt><dd id="citizen_age">—</dd>
+        <dt>Node</dt><dd id="node">—</dd>
+        <dt>Identity Status</dt><dd id="identity_status">—</dd>
+        <dt>Heartbeat</dt><dd id="heartbeat">—</dd>
+        <dt>Last Sync</dt><dd id="last_sync">—</dd>
+      </dl>
+    </section>
+
+    <section class="organs" aria-label="Organs">
+      <article><h2>Telemetry</h2><p id="telemetry_status">—</p></article>
+      <article><h2>Memory</h2><p id="memory_status">—</p></article>
+      <article><h2>Filesystem</h2><p id="filesystem_status">—</p></article>
+      <article><h2>Evidence</h2><p id="evidence_status">—</p></article>
+    </section>
+
+    <section class="evolution-panel" aria-label="Evolution">
+      <h2>Evolution</h2>
+      <dl>
+        <dt>Current Version</dt><dd id="current_version">—</dd>
+        <dt>Latest Evolution</dt><dd id="latest_evolution">—</dd>
+        <dt>Evolution Date</dt><dd id="evolution_date">—</dd>
+      </dl>
+    </section>
+
+
+
+    <section class="evo-history" aria-label="Evolution History">
+      <h2>Evolution History</h2>
+      <ol id="evolution_timeline" class="timeline"></ol>
+    </section>
+
+    <section class="events" aria-label="Event log">
+      <h2>Event Log</h2>
+      <ul id="event_log"></ul>
+    </section>
+
+    <p id="err" class="err" hidden></p>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
