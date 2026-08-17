@@ -1,11 +1,12 @@
 [project]
-name = "citizen-seed"
-version = "0.1.0"
-description = "Citizen Seed — Asset-First minimal Runtime"
+name = "conrrad-citizen"
+version = "0.2.0"
+description = "Citizen — Authentic Digital Organism"
 requires-python = ">=3.11"
 readme = "README.md"
 
 [project.scripts]
+citizen = "citizen_seed.__main__:main"
 citizen-seed = "citizen_seed.__main__:main"
 
 [tool.setuptools.package-dir]
