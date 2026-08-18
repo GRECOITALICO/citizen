@@ -62,19 +62,7 @@ if [ "$FOUND_PREVIOUS" = true ]; then
     echo -e "${YELLOW}Previous Citizen installation detected:${NC}"
     echo -e "$PREVIOUS_ITEMS"
     echo ""
-    echo -e "${YELLOW}All previous files will be removed for a clean install.${NC}"
-    
-    # If running interactively, ask. If piped (curl | bash), auto-clean.
-    if [ -t 0 ]; then
-        read -p "Remove all previous Citizen data and install fresh? [Y/n] " REPLY
-        REPLY=${REPLY:-Y}
-        if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
-            echo -e "${RED}Installation cancelled.${NC}"
-            exit 0
-        fi
-    else
-        echo -e "  (non-interactive mode: auto-cleaning)"
-    fi
+    echo -e "${YELLOW}NOTE: Data directory ($CITIZEN_HOME) will be PRESERVED to maintain identity and memory.${NC}"
 fi
 
 # ─────────────────────────────────────────────────
@@ -123,19 +111,16 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 # Remove systemd unit
-rm -f "$SYSTEMD_UNIT"
+rm -f "$SYSTEMD_UNIT" || true
 if command -v systemctl >/dev/null 2>&1; then
     systemctl --user daemon-reload 2>/dev/null || true
 fi
 
 # Remove binary links
-rm -f "$BIN_DIR/citizen" "$BIN_DIR/citizen-seed"
+rm -f "$BIN_DIR/citizen" "$BIN_DIR/citizen-seed" || true
 
 # Remove venv
-rm -rf "$VENV_DIR"
-
-# Remove citizen data
-rm -rf "$CITIZEN_HOME"
+rm -rf "$VENV_DIR" || true
 
 # Remove system pip package if present
 pip3 uninstall -y conrrad-citizen 2>/dev/null || true
@@ -181,7 +166,7 @@ echo -e "${YELLOW}[5/6] Installing Citizen...${NC}"
 # Create isolated environment
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet --upgrade conrrad-citizen
+"$VENV_DIR/bin/pip" install --quiet conrrad-citizen==0.3.2
 
 # Create binary links
 mkdir -p "$BIN_DIR"
@@ -252,10 +237,13 @@ else
     # No systemd (Docker, WSL1, etc.) - start in background
     echo -e "  ${YELLOW}!${NC} No systemd detected. Starting server directly..."
     nohup "$BIN_DIR/citizen" serve --port $PORT > "$CITIZEN_HOME/serve.log" 2>&1 &
-    sleep 1
+    sleep 2
     echo -e "  ${GREEN}✓${NC} Console: ${CYAN}http://127.0.0.1:${PORT}/${NC}"
 fi
 
+echo -e "\n${YELLOW}[7/7] Triggering remote synchronization...${NC}"
+"$BIN_DIR/citizen" sync
+
 echo ""
-echo -e "  Commands: ${CYAN}citizen status${NC}  |  ${CYAN}citizen serve --port ${PORT}${NC}"
+echo -e "  Commands: ${CYAN}citizen status${NC}  |  ${CYAN}citizen serve --port ${PORT}${NC}  |  ${CYAN}citizen sync${NC}"
 echo ""
