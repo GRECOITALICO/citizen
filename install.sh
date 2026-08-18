@@ -11,7 +11,7 @@ CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-CITIZEN_HOME="$HOME/.citizen"
+export CITIZEN_HOME="$HOME/.citizen"
 VENV_DIR="$HOME/.citizen-env"
 BIN_DIR="$HOME/.local/bin"
 SYSTEMD_SERVICE="citizen-seed-living"
