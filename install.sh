@@ -18,6 +18,8 @@ SYSTEMD_SERVICE="citizen-seed-living"
 SYSTEMD_UNIT="$HOME/.config/systemd/user/${SYSTEMD_SERVICE}.service"
 PORT=3434
 
+EXPECTED_VERSION="0.4.1"
+
 echo -e "${CYAN}=================================================${NC}"
 echo -e "${CYAN}    CITIZEN — INSTALADOR NUCLEAR (LINUX)          ${NC}"
 echo -e "${CYAN}=================================================${NC}"
@@ -161,12 +163,20 @@ echo -e "  ${GREEN}Dependencies OK.${NC}"
 # ─────────────────────────────────────────────────
 # PHASE 5: FRESH INSTALL
 # ─────────────────────────────────────────────────
-echo -e "${YELLOW}[5/6] Installing Citizen...${NC}"
+echo -e "${YELLOW}[5/6] Installing Citizen ${EXPECTED_VERSION}...${NC}"
 
 # Create isolated environment
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet conrrad-citizen==0.3.2
+"$VENV_DIR/bin/pip" install --quiet "conrrad-citizen==${EXPECTED_VERSION}"
+
+# Verify the installed package version before starting Citizen
+INSTALLED_VERSION=$("$VENV_DIR/bin/python" -c "from importlib.metadata import version; print(version('conrrad-citizen'))")
+if [ "$INSTALLED_VERSION" != "$EXPECTED_VERSION" ]; then
+    echo -e "${RED}Installed conrrad-citizen version ${INSTALLED_VERSION}, expected ${EXPECTED_VERSION}.${NC}"
+    exit 1
+fi
+echo -e "  ${GREEN}Package version verified: ${INSTALLED_VERSION}${NC}"
 
 # Create binary links
 mkdir -p "$BIN_DIR"
@@ -245,5 +255,6 @@ echo -e "\n${YELLOW}[7/7] Triggering remote synchronization...${NC}"
 "$BIN_DIR/citizen" sync
 
 echo ""
+echo -e "  ${GREEN}✓${NC} Initial synchronization requested."
 echo -e "  Commands: ${CYAN}citizen status${NC}  |  ${CYAN}citizen serve --port ${PORT}${NC}  |  ${CYAN}citizen sync${NC}"
 echo ""
