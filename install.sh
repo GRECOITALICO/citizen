@@ -8,7 +8,7 @@ SYSTEMD_SERVICE="citizen-seed-living"
 SYSTEMD_UNIT="$HOME/.config/systemd/user/${SYSTEMD_SERVICE}.service"
 PORT=3434
 EXPECTED_VERSION="0.4.1"
-SOURCE="git+https://github.com/GRECOITALICO/CONRRAD-CITIZEN.git@v0.4.1#subdirectory=conrrad-citizen"
+SOURCE="conrrad-citizen==${EXPECTED_VERSION}"
 
 echo -e "${CYAN}=================================================${NC}"
 echo -e "${CYAN}    CITIZEN — INSTALADOR LINUX                 ${NC}"
@@ -49,7 +49,8 @@ fi
 
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet "${SOURCE}"
+export PIP_NO_INPUT=1
+"$VENV_DIR/bin/pip" install --quiet --no-cache-dir --no-input "${SOURCE}"
 INSTALLED_VERSION=$("$VENV_DIR/bin/python" -c "from importlib.metadata import version; print(version('conrrad-citizen'))")
 if [ "$INSTALLED_VERSION" != "$EXPECTED_VERSION" ]; then echo -e "${RED}Installed ${INSTALLED_VERSION}; expected ${EXPECTED_VERSION}.${NC}"; exit 1; fi
 
@@ -73,7 +74,15 @@ else
 fi
 
 echo -e "${YELLOW}[7/7] Triggering remote synchronization...${NC}"
-"$BIN_DIR/citizen" sync
+SYNC_OUT=$("$BIN_DIR/citizen" sync 2>&1 || echo "SYNC_FAILED")
+if echo "$SYNC_OUT" | grep -qi '"state": "Current"'; then
+  echo -e "${GREEN}SYNC_SUCCESS_CURRENT${NC}"
+elif echo "$SYNC_OUT" | grep -qi '"state": "Updated"'; then
+  echo -e "${GREEN}SYNC_SUCCESS_UPDATED${NC}"
+else
+  echo -e "${RED}SYNC_FAILED${NC}"
+  echo "$SYNC_OUT"
+fi
 
 echo -e "${GREEN}Citizen ${EXPECTED_VERSION} installed and initial SYNC requested.${NC}"
 echo "Identity: $(python3 -c "import json; print(json.load(open('$CITIZEN_HOME/identity/identity.json'))['citizen_id'])" 2>/dev/null || echo unknown)"
