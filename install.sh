@@ -7,8 +7,10 @@ BIN_DIR="$HOME/.local/bin"
 SYSTEMD_SERVICE="citizen-seed-living"
 SYSTEMD_UNIT="$HOME/.config/systemd/user/${SYSTEMD_SERVICE}.service"
 PORT=3434
-EXPECTED_VERSION="0.4.1"
-SOURCE="conrrad-citizen==${EXPECTED_VERSION}"
+EXPECTED_VERSION="0.4.2"
+# Published artifact for 0.4.2 is the GitHub Release wheel (PyPI token blocked at cut).
+RELEASE_WHEEL_URL="https://github.com/GRECOITALICO/CONRRAD-CITIZEN/releases/download/v${EXPECTED_VERSION}/conrrad_citizen-${EXPECTED_VERSION}-py3-none-any.whl"
+SOURCE="${RELEASE_WHEEL_URL}"
 
 echo -e "${CYAN}=================================================${NC}"
 echo -e "${CYAN}    CITIZEN — INSTALADOR LINUX                 ${NC}"
