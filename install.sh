@@ -8,9 +8,11 @@ SYSTEMD_SERVICE="citizen-seed-living"
 SYSTEMD_UNIT="$HOME/.config/systemd/user/${SYSTEMD_SERVICE}.service"
 PORT=3434
 EXPECTED_VERSION="0.4.2"
-# Public artifact channel: GRECOITALICO/citizen Release (PyPI 0.4.2 blocked — invalid token).
-# Anonymous download; no gh auth / private repo access required.
-RELEASE_WHEEL_URL="https://github.com/GRECOITALICO/citizen/releases/download/conrrad-citizen-${EXPECTED_VERSION}/conrrad_citizen-${EXPECTED_VERSION}-py3-none-any.whl"
+# Public artifact channel: immutable tag on GRECOITALICO/citizen (raw HTTP 200).
+# Anonymous download; no gh auth / private repo / redirect-follow required.
+# GitHub Release assets 302 to release-assets.githubusercontent.com; raw path does not.
+ARTIFACT_TAG="artifact-conrrad-citizen-${EXPECTED_VERSION}"
+RELEASE_WHEEL_URL="https://raw.githubusercontent.com/GRECOITALICO/citizen/${ARTIFACT_TAG}/release/${EXPECTED_VERSION}/conrrad_citizen-${EXPECTED_VERSION}-py3-none-any.whl"
 EXPECTED_SHA256="0dbb7d46958575759ea90122dc38177066f812210c2496572ec35e1d8280e65c"
 SOURCE_COMMIT_EXPECTED="19c30a5522815dadb9fb6a9d6f68fbac7b3f6074"
 echo -e "${CYAN}=================================================${NC}"
@@ -78,7 +80,7 @@ if [ -n "$SOURCE_COMMIT_EXPECTED" ] && [ "$INSTALLED_COMMIT" != "$SOURCE_COMMIT_
   exit 1
 fi
 
-echo -e "${GREEN}Citizen ${INSTALLED_VERSION} installed from public Release conrrad-citizen-${EXPECTED_VERSION}.${NC}"
+echo -e "${GREEN}Citizen ${INSTALLED_VERSION} installed from public artifact ${ARTIFACT_TAG}.${NC}"
 echo "  SOURCE_COMMIT: ${INSTALLED_COMMIT}"
 mkdir -p "$BIN_DIR"
 ln -sf "$VENV_DIR/bin/citizen" "$BIN_DIR/citizen"
