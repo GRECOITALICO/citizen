@@ -1,5 +1,9 @@
 # PUBLIC ARTIFACT — conrrad-citizen 0.4.2
 
+> Historical P0.2C record. This file describes Wheel B (`0dbb7d…`),
+> which is **not canonical**. Canonical Wheel A is documented in
+> `CANONICAL_ARTIFACT_0_4_2.md`.
+
 ## Package
 - PACKAGE=conrrad-citizen
 - PACKAGE_VERSION=0.4.2

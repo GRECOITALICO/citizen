@@ -8,13 +8,13 @@ SYSTEMD_SERVICE="citizen-seed-living"
 SYSTEMD_UNIT="$HOME/.config/systemd/user/${SYSTEMD_SERVICE}.service"
 PORT=3434
 EXPECTED_VERSION="0.4.2"
-# Public artifact channel: immutable tag on GRECOITALICO/citizen (raw HTTP 200).
+# Canonical Wheel A on immutable tag citizen-runtime-0.4.2 (raw HTTP 200).
 # Anonymous download; no gh auth / private repo / redirect-follow required.
-# GitHub Release assets 302 to release-assets.githubusercontent.com; raw path does not.
-ARTIFACT_TAG="artifact-conrrad-citizen-${EXPECTED_VERSION}"
+# Historical Wheel B remains on tag artifact-conrrad-citizen-0.4.2.
+ARTIFACT_TAG="citizen-runtime-${EXPECTED_VERSION}"
 RELEASE_WHEEL_URL="https://raw.githubusercontent.com/GRECOITALICO/citizen/${ARTIFACT_TAG}/release/${EXPECTED_VERSION}/conrrad_citizen-${EXPECTED_VERSION}-py3-none-any.whl"
-EXPECTED_SHA256="0dbb7d46958575759ea90122dc38177066f812210c2496572ec35e1d8280e65c"
-SOURCE_COMMIT_EXPECTED="19c30a5522815dadb9fb6a9d6f68fbac7b3f6074"
+EXPECTED_SHA256="0b4eb6d336352901e783f747bc5f2cc1775f0822ec1be17c145143ea6a4457ce"
+SOURCE_COMMIT_EXPECTED="73b2916458e671e9537f80500fd9e15fe9a4465b"
 echo -e "${CYAN}=================================================${NC}"
 echo -e "${CYAN}    CITIZEN — INSTALADOR LINUX                 ${NC}"
 echo -e "${CYAN}=================================================${NC}"
