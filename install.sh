@@ -56,22 +56,24 @@ python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
 export PIP_NO_INPUT=1
 
-WHEEL_TMP="$(mktemp /tmp/conrrad-citizen-${EXPECTED_VERSION}.XXXXXX.whl)"
+WHEEL_TMP_DIR="$(mktemp -d /tmp/conrrad-citizen-${EXPECTED_VERSION}.XXXXXX)"
+WHEEL_TMP="${WHEEL_TMP_DIR}/conrrad_citizen-${EXPECTED_VERSION}-py3-none-any.whl"
 echo -e "${CYAN}Downloading public artifact...${NC}"
 echo "  URL: ${RELEASE_WHEEL_URL}"
-curl -fsSL -A "citizen-installer/0.4.2" -o "$WHEEL_TMP" "$RELEASE_WHEEL_URL"
+# Prefer direct HTTP 200 (raw URL). -L kept for robustness; max-redirs allows one hop.
+curl -fsS --max-redirs 3 -A "citizen-installer/0.4.2" -o "$WHEEL_TMP" "$RELEASE_WHEEL_URL"
 GOT_SHA256="$(sha256sum "$WHEEL_TMP" | awk '{print $1}')"
 if [ "$GOT_SHA256" != "$EXPECTED_SHA256" ]; then
   echo -e "${RED}Artifact SHA256 mismatch.${NC}"
   echo "  expected: ${EXPECTED_SHA256}"
   echo "  got:      ${GOT_SHA256}"
-  rm -f "$WHEEL_TMP"
+  rm -rf "$WHEEL_TMP_DIR"
   exit 1
 fi
 echo -e "${GREEN}Artifact SHA256 verified.${NC}"
 
 "$VENV_DIR/bin/pip" install --quiet --no-cache-dir --no-input "$WHEEL_TMP"
-rm -f "$WHEEL_TMP"
+rm -rf "$WHEEL_TMP_DIR"
 INSTALLED_VERSION=$("$VENV_DIR/bin/python" -c "from importlib.metadata import version; print(version('conrrad-citizen'))")
 if [ "$INSTALLED_VERSION" != "$EXPECTED_VERSION" ]; then echo -e "${RED}Installed ${INSTALLED_VERSION}; expected ${EXPECTED_VERSION}.${NC}"; exit 1; fi
 INSTALLED_COMMIT=$("$VENV_DIR/bin/python" -c "import citizen_seed as cs; print(getattr(cs,'SOURCE_COMMIT',''))")
