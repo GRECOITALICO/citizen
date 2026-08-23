@@ -8,10 +8,11 @@ SYSTEMD_SERVICE="citizen-seed-living"
 SYSTEMD_UNIT="$HOME/.config/systemd/user/${SYSTEMD_SERVICE}.service"
 PORT=3434
 EXPECTED_VERSION="0.4.2"
-# Published artifact for 0.4.2 is the GitHub Release wheel (PyPI token blocked at cut).
-RELEASE_WHEEL_URL="https://github.com/GRECOITALICO/CONRRAD-CITIZEN/releases/download/v${EXPECTED_VERSION}/conrrad_citizen-${EXPECTED_VERSION}-py3-none-any.whl"
-SOURCE="${RELEASE_WHEEL_URL}"
-
+# Public artifact channel: GRECOITALICO/citizen Release (PyPI 0.4.2 blocked — invalid token).
+# Anonymous download; no gh auth / private repo access required.
+RELEASE_WHEEL_URL="https://github.com/GRECOITALICO/citizen/releases/download/conrrad-citizen-${EXPECTED_VERSION}/conrrad_citizen-${EXPECTED_VERSION}-py3-none-any.whl"
+EXPECTED_SHA256="0dbb7d46958575759ea90122dc38177066f812210c2496572ec35e1d8280e65c"
+SOURCE_COMMIT_EXPECTED="19c30a5522815dadb9fb6a9d6f68fbac7b3f6074"
 echo -e "${CYAN}=================================================${NC}"
 echo -e "${CYAN}    CITIZEN — INSTALADOR LINUX                 ${NC}"
 echo -e "${CYAN}=================================================${NC}"
@@ -52,11 +53,33 @@ fi
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
 export PIP_NO_INPUT=1
-"$VENV_DIR/bin/pip" install --quiet --no-cache-dir --no-input "${SOURCE}"
+
+WHEEL_TMP="$(mktemp /tmp/conrrad-citizen-${EXPECTED_VERSION}.XXXXXX.whl)"
+echo -e "${CYAN}Downloading public artifact...${NC}"
+echo "  URL: ${RELEASE_WHEEL_URL}"
+curl -fsSL -A "citizen-installer/0.4.2" -o "$WHEEL_TMP" "$RELEASE_WHEEL_URL"
+GOT_SHA256="$(sha256sum "$WHEEL_TMP" | awk '{print $1}')"
+if [ "$GOT_SHA256" != "$EXPECTED_SHA256" ]; then
+  echo -e "${RED}Artifact SHA256 mismatch.${NC}"
+  echo "  expected: ${EXPECTED_SHA256}"
+  echo "  got:      ${GOT_SHA256}"
+  rm -f "$WHEEL_TMP"
+  exit 1
+fi
+echo -e "${GREEN}Artifact SHA256 verified.${NC}"
+
+"$VENV_DIR/bin/pip" install --quiet --no-cache-dir --no-input "$WHEEL_TMP"
+rm -f "$WHEEL_TMP"
 INSTALLED_VERSION=$("$VENV_DIR/bin/python" -c "from importlib.metadata import version; print(version('conrrad-citizen'))")
 if [ "$INSTALLED_VERSION" != "$EXPECTED_VERSION" ]; then echo -e "${RED}Installed ${INSTALLED_VERSION}; expected ${EXPECTED_VERSION}.${NC}"; exit 1; fi
+INSTALLED_COMMIT=$("$VENV_DIR/bin/python" -c "import citizen_seed as cs; print(getattr(cs,'SOURCE_COMMIT',''))")
+if [ -n "$SOURCE_COMMIT_EXPECTED" ] && [ "$INSTALLED_COMMIT" != "$SOURCE_COMMIT_EXPECTED" ]; then
+  echo -e "${RED}SOURCE_COMMIT mismatch: ${INSTALLED_COMMIT} != ${SOURCE_COMMIT_EXPECTED}${NC}"
+  exit 1
+fi
 
-echo -e "${GREEN}Citizen ${INSTALLED_VERSION} installed from GitHub tag v${EXPECTED_VERSION}.${NC}"
+echo -e "${GREEN}Citizen ${INSTALLED_VERSION} installed from public Release conrrad-citizen-${EXPECTED_VERSION}.${NC}"
+echo "  SOURCE_COMMIT: ${INSTALLED_COMMIT}"
 mkdir -p "$BIN_DIR"
 ln -sf "$VENV_DIR/bin/citizen" "$BIN_DIR/citizen"
 ln -sf "$VENV_DIR/bin/citizen-seed" "$BIN_DIR/citizen-seed"
