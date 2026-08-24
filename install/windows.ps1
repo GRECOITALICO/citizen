@@ -1,16 +1,16 @@
 # CONRRAD Citizen — public Windows host bootstrap (WSL2).
 # One instruction. Self-elevates. Resumes after reboot. Never Sync.
 #
-# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.3/install/windows.ps1 | iex"
+# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.4/install/windows.ps1 | iex"
 #
 # Windows is Host infrastructure. WSL2 is Host infrastructure.
 # The managed Linux environment is the runtime boundary.
 # Citizen is the same product certified on Linux.
 param()
 $ErrorActionPreference = "Stop"
-$PublicTag = "citizen-windows-wsl2-0.4.2.3"
+$PublicTag = "citizen-windows-wsl2-0.4.2.4"
 $LinuxInstallTag = "citizen-managed-0.4.2.1"
-$InstallerVersion = "0.4.2.3"
+$InstallerVersion = "0.4.2.4"
 $PublicOrigin = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$PublicTag"
 $BootstrapUrl = "$PublicOrigin/install/windows.ps1"
 $GuestUrl = "$PublicOrigin/install/windows-guest.sh"
@@ -93,9 +93,14 @@ function Write-HostState {
     $script:ResumeMarker = @(
         "AUTHORIZATION_REQUIRED", "PROVISIONING", "REBOOT_REQUIRED", "RESUMING"
     ) -contains $Phase
+    # Canonical persisted field is bootstrap_phase only.
+    # FAILURE_CLASS=PUBLIC_BOOTSTRAP_PARSE_ERROR AFFECTED_VERSION=0.4.2.3
+    # ROOT_CAUSE=CASE_INSENSITIVE_DUPLICATE_HASH_KEY
+    # Windows PowerShell rejected Write-HostState before execution:
+    # DuplicateKeyInHashLiteral — "No se permiten claves duplicadas 'BOOTSTRAP_PHASE' en los literales de hash."
+    # Do not add BOOTSTRAP_PHASE as a second key; hash keys are case-insensitive.
     $payload = [ordered]@{
         bootstrap_phase = $Phase
-        BOOTSTRAP_PHASE = $Phase
         phase = (Get-LegacyPhaseAlias $Phase)
         plan_id = $script:PlanId
         resume_marker = $script:ResumeMarker
@@ -127,6 +132,17 @@ function Read-HostState {
     } catch {
         return $null
     }
+}
+
+function Get-CanonicalBootstrapPhase($st) {
+    if ($null -eq $st) { return "" }
+    foreach ($n in @($st.PSObject.Properties.Name)) {
+        if ($n -ieq "bootstrap_phase") { return [string]$st.$n }
+    }
+    foreach ($n in @($st.PSObject.Properties.Name)) {
+        if ($n -ieq "phase") { return [string]$st.$n }
+    }
+    return ""
 }
 
 function Save-BootstrapCopy {
@@ -732,7 +748,7 @@ if ($prior) {
     if ($prior.authorization_granted) { $script:AuthorizationGranted = $true }
     if ($prior.plan_id) { $script:PlanId = [string]$prior.plan_id }
     if ($prior.resume_marker -eq $true) { $script:ResumeMarker = $true }
-    if ($prior.bootstrap_phase -eq "REBOOT_REQUIRED" -or $prior.phase -eq "wsl_pending_reboot") {
+    if ((Get-CanonicalBootstrapPhase $prior) -eq "REBOOT_REQUIRED" -or $prior.phase -eq "wsl_pending_reboot") {
         Write-HostState "RESUMING" $false
         Write-CitizenHost "Checking your Windows environment..."
     }

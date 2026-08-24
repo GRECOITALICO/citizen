@@ -1,5 +1,5 @@
 {
-  "installer_version": "0.4.2.3",
+  "installer_version": "0.4.2.4",
   "public_image": "ghcr.io/grecoitalico/citizen@sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da",
   "managed_distro": "CONRRAD-Citizen",
   "ui": "http://127.0.0.1:3434/",
