@@ -1,0 +1,22 @@
+{
+  "artifact": "conrrad_citizen-0.4.2.1-py3-none-any.whl",
+  "package_version": "0.4.2.1",
+  "runtime_version": "0.4.2",
+  "source_repository": "GRECOITALICO/CONRRAD-CITIZEN",
+  "source_commit": "44246a3ffa9f789c40fe023a0d72a053dc08088b",
+  "publication_repository": "GRECOITALICO/citizen",
+  "immutable_tag": "citizen-runtime-0.4.2.1",
+  "wheel_sha256": "fe8f06d10219655bd0ebf84a1f8a08c955d65fa22a76316c3887d29fcede51e9",
+  "signing": "none / SHA256 + source commit provenance. This record is not production cryptographic signing.",
+  "note": "This is not the frozen 0.4.2 artifact. This artifact changes install semantics to INSTALL != SYNC. Bytes were copied from GRECOITALICO/CONRRAD-CITIZEN commit 407d8061c5cafe8a9caf640ee502a902eb2771d8. They were not rebuilt.",
+  "contract": {
+    "install": "Birth OR recognize existing Citizen, then boot. Does not call one_click_update().",
+    "sync": "explicit evolution only"
+  },
+  "frozen_public_0_4_2": {
+    "artifact": "conrrad_citizen-0.4.2-py3-none-any.whl",
+    "sha256": "0b4eb6d336352901e783f747bc5f2cc1775f0822ec1be17c145143ea6a4457ce",
+    "immutable_tag": "citizen-runtime-0.4.2",
+    "note": "Immutable historical/canonical frozen artifact. Not this package. Not overwritten."
+  }
+}

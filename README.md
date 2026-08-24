@@ -1,63 +1,101 @@
 # CONRRAD Citizen
 
-A Citizen is a living local identity. It is born once, does Work, keeps
-Evidence and History, and can later Sync to a new Citizen version without
-becoming someone else.
-
-Runtime package = **0.4.2**
-
-Citizen can later evolve to **0.4.3**. Those are not the same number.
-
-PyPI is not the install path. `pip install conrrad-citizen` currently
-resolves to **0.4.1** and must not be used.
+A Citizen is a living local identity: born once, does Work, records Evidence,
+keeps History, and can later Sync without becoming someone else.
 
 ## Install
 
-1. Download the canonical wheel from the immutable public tag.
-2. Verify SHA256.
-3. `pip install` that local file.
-4. Run `citizen install`.
+### Linux
 
 ```bash
-WHEEL=conrrad_citizen-0.4.2-py3-none-any.whl
-URL=https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-runtime-0.4.2/release/0.4.2/${WHEEL}
-curl -fsS -o "$WHEEL" "$URL"
-echo "0b4eb6d336352901e783f747bc5f2cc1775f0822ec1be17c145143ea6a4457ce  $WHEEL" | sha256sum -c
-python3 -m venv ~/.citizen-env
-~/.citizen-env/bin/pip install "./$WHEEL"
-~/.citizen-env/bin/citizen install
+curl -fsSL https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-runtime-0.4.2.1/install.sh | bash
 ```
+
+That command fetches package **0.4.2.1** from the immutable tag
+`citizen-runtime-0.4.2.1`, verifies SHA256, prepares an isolated venv,
+and runs `citizen install`.
+
+`citizen install` = **Birth** (first time) or **Resume** (existing identity).
+It does **not** Sync.
 
 Then open http://127.0.0.1:3434/
 
-On Linux, `citizen install` starts the systemd user service.
-On Windows and macOS there is no native service: run `citizen serve`.
+### Windows
 
-See [INSTALL.md](INSTALL.md) for the same path with recovery notes.
+Not yet public. The Windows WSL2 host path exists in the private runtime
+source. It is **not** a public one-command in this repository.
+
+`WINDOWS_STATUS=IMPLEMENTED_NOT_PUBLIC`
+
+### macOS
+
+Not yet public. There is no public macOS host/VM installer here.
+
+`MACOS_STATUS=IMPLEMENTED_NOT_PUBLIC`
 
 ## Versions
 
 | Field | Value |
 |---|---|
-| Runtime / package | 0.4.2 |
-| Embedded SOURCE_COMMIT | `73b2916458e671e9537f80500fd9e15fe9a4465b` |
-| Release-cut tree | `19c30a5522815dadb9fb6a9d6f68fbac7b3f6074` |
-| Artifact SHA256 | `0b4eb6d336352901e783f747bc5f2cc1775f0822ec1be17c145143ea6a4457ce` |
-| Immutable tag | `citizen-runtime-0.4.2` |
+| Package (what you download) | **0.4.2.1** |
+| Runtime (what the engine is) | **0.4.2** |
+| Citizen after fresh Birth | **0.4.2** |
+| Citizen after successful Sync | **0.4.3** |
 
-A previous public rebuild (Wheel B, `0dbb7d…`) is historical only.
-See `release/0.4.2-historical-public-rebuild/`.
+These are not the same number.
+
+`INSTALL` = Birth / Resume.
+`SYNC` = Evolution. Explicit. Never automatic during install.
+
+Do not use `pip install conrrad-citizen` from PyPI. That still resolves to 0.4.1.
+
+Do not use `main` as the install trust reference. Use tag `citizen-runtime-0.4.2.1`.
 
 ## After install
 
 - `citizen status` — living Citizen vs runtime
 - `citizen work` — documented Work
-- `citizen sync` — evolution when a verified package is available (not a reinstall)
+- `citizen sync` — evolution when a verified package is available
 
 Failed Sync leaves the current Citizen in place.
+
+## Recovery
+
+- Port 3434 in use: do not kill other processes. Use `CITIZEN_UI_PORT` and `citizen serve`, or free the port yourself
+- Linux service not running: `citizen start`
+- UI cannot connect: confirm `citizen status` or that `citizen serve` is running
+- Sync failure: current Citizen is preserved; do not reinstall to recover
+
+`citizen uninstall --purge` destroys identity and Evidence. That is not recovery.
+
+See [INSTALL.md](INSTALL.md) for the same product path.
+
+## Advanced
+
+Manual wheel install (not the first-user path):
+
+```bash
+WHEEL=conrrad_citizen-0.4.2.1-py3-none-any.whl
+URL=https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-runtime-0.4.2.1/release/0.4.2.1/${WHEEL}
+curl -fsS --max-redirs 0 -o "$WHEEL" "$URL"
+echo "fe8f06d10219655bd0ebf84a1f8a08c955d65fa22a76316c3887d29fcede51e9  $WHEEL" | sha256sum -c
+python3 -m venv ~/.local/share/conrrad-citizen/venv
+~/.local/share/conrrad-citizen/venv/bin/pip install "./$WHEEL"
+~/.local/share/conrrad-citizen/venv/bin/citizen install
+```
+
+Frozen 0.4.2 (`conrrad_citizen-0.4.2-py3-none-any.whl`, SHA256
+`0b4eb6d336352901e783f747bc5f2cc1775f0822ec1be17c145143ea6a4457ce`,
+tag `citizen-runtime-0.4.2`) is the historical canonical frozen artifact.
+It is **not** the current new-user runtime. It auto-Synced on install.
+Do not overwrite it.
+
+The old destructive `install.sh` is retained only as
+[historical/install-0.4.2-destructive.sh](historical/install-0.4.2-destructive.sh).
+It is not the primary command.
 
 ## Historical 0.1 seed
 
 The original certified 0.1 seed record remains in this repository
 ([CERTIFIED_0.1.md](CERTIFIED_0.1.md), [docs/citizen-life/](docs/citizen-life/)).
-It is not the 0.4.2 install path.
+It is not the 0.4.2.1 install path.
