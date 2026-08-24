@@ -1,5 +1,5 @@
 {
-  "installer_version": "0.4.2.6",
+  "installer_version": "0.4.2.7",
   "public_image": "ghcr.io/grecoitalico/citizen@sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da",
   "managed_distro": "CONRRAD-Citizen",
   "ui": "http://127.0.0.1:3434/",
@@ -21,8 +21,10 @@
     "CREATING_ENVIRONMENT",
     "ENVIRONMENT_READY",
     "BIRTH_OR_RESUME",
+    "VERIFYING_CITIZEN",
     "CITIZEN_READY",
     "READY",
+    "POST_START_HOUSEKEEPING",
     "COMPLETE"
   ],
   "failure_phases": [

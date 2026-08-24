@@ -1,16 +1,16 @@
 # CONRRAD Citizen — public Windows host bootstrap (WSL2).
 # One instruction. Self-elevates. Resumes after reboot. Never Sync.
 #
-# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.6/install/windows.ps1 | iex"
+# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.7/install/windows.ps1 | iex"
 #
 # Windows is Host infrastructure. WSL2 is Host infrastructure.
 # The managed Linux environment is the runtime boundary.
 # Citizen is the same product certified on Linux.
 param()
 $ErrorActionPreference = "Stop"
-$PublicTag = "citizen-windows-wsl2-0.4.2.6"
+$PublicTag = "citizen-windows-wsl2-0.4.2.7"
 $LinuxInstallTag = "citizen-managed-0.4.2.1"
-$InstallerVersion = "0.4.2.6"
+$InstallerVersion = "0.4.2.7"
 $PublicOrigin = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$PublicTag"
 $BootstrapUrl = "$PublicOrigin/install/windows.ps1"
 $GuestUrl = "$PublicOrigin/install/windows-guest.sh"
@@ -59,6 +59,17 @@ $script:PriorBootstrapOurs = $false
 $script:PriorPhase = ""
 $script:RebootResume = $false
 $script:ResumeTaskState = ""
+$script:ProductReady = "FALSE"
+$script:BootstrapResult = ""
+$script:InstallationResult = ""
+$script:ReadinessResult = ""
+$script:BirthMode = ""
+$script:ObservedCitizen = ""
+$script:LivingVersion = ""
+$script:UiPort = "3434"
+$script:HttpStatus = ""
+$script:CleanupWarnings = @()
+$script:CleanupClass = "INFORMATIONAL"
 New-Item -ItemType Directory -Force -Path (Join-Path $StateDir "install") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $StateDir "distro") | Out-Null
 New-Item -ItemType Directory -Force -Path $VolumeWin | Out-Null
@@ -95,6 +106,8 @@ function Get-LegacyPhaseAlias([string]$Phase) {
         "VERIFYING_PUBLIC_IMAGE" { return "runtime_provisioning" }
         "CREATING_ENVIRONMENT" { return "runtime_provisioning" }
         "BIRTH_OR_RESUME" { return "runtime_provisioning" }
+        "VERIFYING_CITIZEN" { return "runtime_provisioning" }
+        "POST_START_HOUSEKEEPING" { return "ready" }
         "READY" { return "ready" }
         "CITIZEN_READY" { return "ready" }
         "COMPLETE" { return "ready" }
@@ -162,6 +175,17 @@ function Write-HostState {
         managed_distro_class = $script:ManagedDistroClass
         managed_distro_registered = [bool]$script:ManagedDistroRegistered
         resume_task_state = $script:ResumeTaskState
+        PRODUCT_READY = $script:ProductReady
+        BOOTSTRAP_RESULT = $script:BootstrapResult
+        INSTALLATION_RESULT = $script:InstallationResult
+        READINESS_RESULT = $script:ReadinessResult
+        BIRTH_MODE = $script:BirthMode
+        CITIZEN_ID = $script:ObservedCitizen
+        LIVING_VERSION = $script:LivingVersion
+        PORT = $script:UiPort
+        HTTP_STATUS = $script:HttpStatus
+        CLEANUP_WARNINGS = @($script:CleanupWarnings)
+        CLEANUP_CLASS = $script:CleanupClass
     }
     $payload | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $StateFile
 }
@@ -288,7 +312,7 @@ function Unregister-ResumeAfterReboot {
         } elseif ($blob -match "cannot find the file specified" -or $blob -match "No se puede encontrar el archivo especificado" -or $blob -match "cannot find the path specified" -or $blob -match "does not exist") {
             $script:ResumeTaskState = "TASK_ALREADY_ABSENT"
         } else {
-            $script:ResumeTaskState = "TASK_ALREADY_ABSENT"
+            $script:ResumeTaskState = "TASK_DELETE_FAILED"
         }
     }
     try {
@@ -424,6 +448,11 @@ function Get-PortClass {
     $occupied = Test-PortOccupied
     if (-not $occupied) { return "FREE" }
     if (Test-KnownCitizen) { return "CURRENT_CITIZEN" }
+    try {
+        $probe = Read-CitizenProductReadiness
+        if ($probe.Ready) { return "CURRENT_CITIZEN" }
+    } catch {
+    }
     return "UNKNOWN_PROCESS"
 }
 
@@ -630,6 +659,132 @@ function Write-UnknownDistroFail {
 function Write-UnrecoverableDistroFail {
     $script:InstallClass = "MANAGED_INSTALL_BROKEN"
     Write-Fail "PROVISION_FAILED" "Citizen found an existing managed Linux environment that could not be recovered automatically." "Citizen did not create a Citizen.`nCitizen did not modify unrelated WSL distributions.`nCitizen did not unregister the existing distribution." $false
+}
+
+function Get-CitizenHttp {
+    param([string]$Path)
+    $url = "http://127.0.0.1:$($script:UiPort)$Path"
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $resp = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 3
+        return [pscustomobject]@{ Status = [int]$resp.StatusCode; Body = [string]$resp.Content }
+    } catch {
+        $code = 0
+        try {
+            if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+                $code = [int]$_.Exception.Response.StatusCode
+            }
+        } catch {
+        }
+        return [pscustomobject]@{ Status = $code; Body = "" }
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+function Read-CitizenProductReadiness {
+    $lifeHit = Get-CitizenHttp "/api/life"
+    $livingHit = Get-CitizenHttp "/api/living"
+    $rootHit = Get-CitizenHttp "/"
+    $status = 0
+    if ($lifeHit.Status -eq 200) { $status = 200 }
+    elseif ($livingHit.Status -eq 200) { $status = 200 }
+    elseif ($rootHit.Status -eq 200) { $status = 200 }
+    $script:HttpStatus = [string]$status
+    $life = $null
+    $living = $null
+    try { if ($lifeHit.Body) { $life = $lifeHit.Body | ConvertFrom-Json } } catch { }
+    try { if ($livingHit.Body) { $living = $livingHit.Body | ConvertFrom-Json } } catch { }
+    $state = ""
+    $cid = ""
+    $ver = ""
+    if ($life -and $life.citizen) {
+        $state = [string]$life.citizen.state
+        $cid = [string]$life.citizen.citizen_id
+        $ver = [string]$life.citizen.version
+    }
+    if ($living) {
+        if (-not $cid) { $cid = [string]$living.citizen_id }
+        if (-not $ver) { $ver = [string]$living.citizen_seed_version }
+        if (-not $state) {
+            if ([string]$living.alive_status -eq "Alive" -and [string]$living.identity_status -eq "sealed" -and $cid -like "cit_*") {
+                $state = "READY"
+            }
+        }
+    }
+    $httpOk = ($status -eq 200)
+    $stateReady = ($state -eq "READY")
+    $ready = ($httpOk -and $stateReady)
+    if ($cid) { $script:ObservedCitizen = $cid }
+    if ($ver) { $script:LivingVersion = $ver }
+    if ($ready) {
+        $script:ProductReady = "TRUE"
+        $script:ReadinessResult = "READY"
+    } else {
+        $script:ProductReady = "FALSE"
+        $script:ReadinessResult = "NOT_READY"
+    }
+    return [pscustomobject]@{
+        Ready = $ready
+        HttpOk = $httpOk
+        StateReady = $stateReady
+        Status = $status
+        State = $state
+        Citizen = $cid
+        Version = $ver
+    }
+}
+
+function Wait-CitizenProductReady {
+    param(
+        [int]$Attempts = 30,
+        [int]$DelaySec = 2
+    )
+    $last = $null
+    for ($i = 0; $i -lt $Attempts; $i++) {
+        $last = Read-CitizenProductReadiness
+        if ($last.Ready) { return $last }
+        if ($i -lt ($Attempts - 1)) { Start-Sleep -Seconds $DelaySec }
+    }
+    return $last
+}
+
+function Invoke-PostStartHousekeeping {
+    Write-HostState "POST_START_HOUSEKEEPING" $true
+    $script:CleanupClass = "INFORMATIONAL"
+    $script:CleanupWarnings = @()
+    try {
+        Unregister-ResumeAfterReboot
+        if ($script:ResumeTaskState -eq "TASK_DELETE_FAILED") {
+            $script:CleanupClass = "WARNING"
+            $script:CleanupWarnings += "scheduled task cleanup failed"
+        }
+    } catch {
+        $script:CleanupClass = "WARNING"
+        $script:CleanupWarnings += "cleanup exception"
+        $script:ResumeTaskState = "TASK_DELETE_FAILED"
+    }
+}
+
+function Complete-BootstrapSuccess {
+    $script:InstallationResult = "SUCCESS"
+    $script:BootstrapResult = "SUCCESS"
+    $script:ProductReady = "TRUE"
+    $script:ReadinessResult = "READY"
+    $script:InstallClass = "MANAGED_INSTALL_READY"
+    Write-HostState "CITIZEN_READY" $true
+    Write-HostState "READY" $true
+    Invoke-PostStartHousekeeping
+    Write-HostState "COMPLETE" $true
+    Write-CitizenHost "Citizen is READY."
+    Write-CitizenHost "Installation complete."
+    if ($script:CleanupClass -eq "WARNING") {
+        Write-CitizenHost "Cleanup warning recorded; Citizen remains healthy."
+    }
+    Write-Host "http://127.0.0.1:$($script:UiPort)/"
+    try { Start-Process "http://127.0.0.1:$($script:UiPort)/" } catch { }
+    exit 0
 }
 
 function Classify-WslStderr([string]$Stderr) {
@@ -1207,11 +1362,27 @@ Write-HostState "PROVISIONING_CONTAINER_ENGINE" $true
 Write-HostState "VERIFYING_CONTAINER_ENGINE" $true
 Write-HostState "ENVIRONMENT_READY" $true
 $volWsl = ConvertTo-WslPath $VolumeWin
-Write-CitizenHost "Preparing managed Citizen environment..."
-Write-CitizenHost "Verifying public Citizen image..."
+if ($own -eq "KNOWN_MANAGED_DISTRO" -or (Test-KnownCitizen)) {
+    Write-CitizenHost "Existing managed Citizen found."
+    Write-CitizenHost "Verifying environment..."
+} else {
+    Write-CitizenHost "Preparing managed Citizen environment..."
+    Write-CitizenHost "Verifying public Citizen image..."
+}
 Write-HostState "VERIFYING_PUBLIC_IMAGE" $true
 Write-HostState "CREATING_ENVIRONMENT" $true
 Write-HostState "BIRTH_OR_RESUME" $true
+Write-HostState "VERIFYING_CITIZEN" $true
+$before = Read-CitizenProductReadiness
+if ($before.Ready) {
+    $script:BirthMode = "ALREADY_RUNNING"
+    Complete-BootstrapSuccess
+}
+if (Test-KnownCitizen) {
+    $script:BirthMode = "RESUME"
+} else {
+    $script:BirthMode = "BIRTH"
+}
 Write-CitizenHost "Starting Citizen..."
 $envLine = "CITIZEN_HOME='$volWsl' CITIZEN_DATA_DIR='$volWsl' CITIZEN_LINUX_INSTALL_URL='$LinuxInstallUrl' CITIZEN_IMAGE='$ImageName@$ImageDigest' CITIZEN_OPEN_BROWSER=0"
 $prevEap = $ErrorActionPreference
@@ -1221,26 +1392,13 @@ $code = $LASTEXITCODE
 $ErrorActionPreference = $prevEap
 $guestBlob = ($guestOut | Out-String)
 Set-WslProbeMeta "guest_bootstrap" ([pscustomobject]@{ ExitCode = $code; Stdout = $guestBlob; Stderr = $guestBlob })
-$guestOk = $false
-if ($code -eq 0) {
-    $guestOk = $true
-} elseif ((Classify-WslStderr $guestBlob) -eq "SYSTEMD_USER_SESSION_WARNING") {
-    $guestOk = $true
+$after = Wait-CitizenProductReady -Attempts 30 -DelaySec 2
+if ($after.Ready) {
+    Complete-BootstrapSuccess
 }
-if ($guestOk -and (Test-ManagedEnvironmentPostGuest)) {
-    $script:InstallClass = "MANAGED_INSTALL_READY"
-    Write-HostState "CITIZEN_READY" $true
-    Write-HostState "READY" $true
-    Write-HostState "COMPLETE" $true
-    Unregister-ResumeAfterReboot
-    Write-CitizenHost "Citizen READY."
-    Write-Host "http://127.0.0.1:3434/"
-    Start-Process "http://127.0.0.1:3434/"
-    exit 0
-}
-if (-not $guestOk) {
-    Write-Fail "PROVISION_FAILED" "Citizen could not be started." "Citizen did not complete Birth or Resume.`nNo additional command is required right now." $false
-    exit $code
-}
-Write-ManagedEnvironmentFail
+$script:InstallationResult = "FAILURE"
+$script:BootstrapResult = "FAILURE"
+$script:ProductReady = "FALSE"
+if (-not $script:ReadinessResult) { $script:ReadinessResult = "NOT_READY" }
+Write-Fail "PROVISION_FAILED" "Citizen could not be started." "Citizen did not complete Birth or Resume.`nNo additional command is required right now." $false
 exit 1
