@@ -1,16 +1,16 @@
 # CONRRAD Citizen — public Windows host bootstrap (WSL2).
 # One instruction. Self-elevates. Resumes after reboot. Never Sync.
 #
-# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.5/install/windows.ps1 | iex"
+# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.6/install/windows.ps1 | iex"
 #
 # Windows is Host infrastructure. WSL2 is Host infrastructure.
 # The managed Linux environment is the runtime boundary.
 # Citizen is the same product certified on Linux.
 param()
 $ErrorActionPreference = "Stop"
-$PublicTag = "citizen-windows-wsl2-0.4.2.5"
+$PublicTag = "citizen-windows-wsl2-0.4.2.6"
 $LinuxInstallTag = "citizen-managed-0.4.2.1"
-$InstallerVersion = "0.4.2.5"
+$InstallerVersion = "0.4.2.6"
 $PublicOrigin = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$PublicTag"
 $BootstrapUrl = "$PublicOrigin/install/windows.ps1"
 $GuestUrl = "$PublicOrigin/install/windows-guest.sh"
@@ -52,6 +52,13 @@ $script:ContainerEngineProbe = ""
 $script:NetworkProbe = ""
 $script:ManagedUserProbe = ""
 $script:SystemdProductRequirement = "FALSE"
+$script:InstallClass = ""
+$script:ManagedDistroClass = ""
+$script:ManagedDistroRegistered = $false
+$script:PriorBootstrapOurs = $false
+$script:PriorPhase = ""
+$script:RebootResume = $false
+$script:ResumeTaskState = ""
 New-Item -ItemType Directory -Force -Path (Join-Path $StateDir "install") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $StateDir "distro") | Out-Null
 New-Item -ItemType Directory -Force -Path $VolumeWin | Out-Null
@@ -81,6 +88,14 @@ function Get-LegacyPhaseAlias([string]$Phase) {
         "REBOOT_REQUIRED" { return "wsl_pending_reboot" }
         "RESUMING" { return "wsl_ready" }
         "ENVIRONMENT_READY" { return "runtime_provisioning" }
+        "PROVISIONING_WSL" { return "wsl_enable_requested" }
+        "VERIFYING_WSL" { return "wsl_ready" }
+        "PROVISIONING_CONTAINER_ENGINE" { return "runtime_provisioning" }
+        "VERIFYING_CONTAINER_ENGINE" { return "runtime_provisioning" }
+        "VERIFYING_PUBLIC_IMAGE" { return "runtime_provisioning" }
+        "CREATING_ENVIRONMENT" { return "runtime_provisioning" }
+        "BIRTH_OR_RESUME" { return "runtime_provisioning" }
+        "READY" { return "ready" }
         "CITIZEN_READY" { return "ready" }
         "COMPLETE" { return "ready" }
         "UNKNOWN_LEGACY" { return "failed" }
@@ -102,7 +117,7 @@ function Write-HostState {
     $script:BootstrapPhase = $Phase
     $script:DiagPhase = $Phase
     $script:ResumeMarker = @(
-        "AUTHORIZATION_REQUIRED", "PROVISIONING", "REBOOT_REQUIRED", "RESUMING"
+        "AUTHORIZATION_REQUIRED", "PROVISIONING", "PROVISIONING_WSL", "REBOOT_REQUIRED", "RESUMING"
     ) -contains $Phase
     # Canonical persisted field is bootstrap_phase only.
     # FAILURE_CLASS=PUBLIC_BOOTSTRAP_PARSE_ERROR AFFECTED_VERSION=0.4.2.3
@@ -143,6 +158,10 @@ function Write-HostState {
         NETWORK_PROBE = $script:NetworkProbe
         MANAGED_USER_PROBE = $script:ManagedUserProbe
         SYSTEMD_PRODUCT_REQUIREMENT = $script:SystemdProductRequirement
+        install_class = $script:InstallClass
+        managed_distro_class = $script:ManagedDistroClass
+        managed_distro_registered = [bool]$script:ManagedDistroRegistered
+        resume_task_state = $script:ResumeTaskState
     }
     $payload | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $StateFile
 }
@@ -223,8 +242,62 @@ function Register-ResumeAfterReboot {
     New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "CONRRADCitizenHost" -Value $tr -PropertyType String -Force | Out-Null
 }
 
+function Get-ResumeTaskState {
+    if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
+        try {
+            $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+            if ($t) {
+                if ([string]$t.State -eq "Running") { return "RUNNING" }
+                return "EXISTS"
+            }
+        } catch {
+        }
+    }
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $PSNativeCommandUseErrorActionPreference = $false
+    $raw = schtasks.exe /Query /TN $TaskName 2>&1
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    $blob = (($raw | Out-String) + "")
+    if ($code -eq 0) { return "EXISTS" }
+    if ($blob -match "cannot find the file specified" -or $blob -match "No se puede encontrar el archivo especificado" -or $blob -match "cannot find the path specified" -or $blob -match "does not exist") {
+        return "MISSING"
+    }
+    if ($code -ne 0) { return "MISSING" }
+    return "MISSING"
+}
+
 function Unregister-ResumeAfterReboot {
-    schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
+    # Cleanup is never allowed to turn a successful installation into failure.
+    # ERROR_TASK_NOT_FOUND / "The system cannot find the file specified." = TASK_ALREADY_ABSENT.
+    $state = Get-ResumeTaskState
+    $script:ResumeTaskState = $state
+    if ($state -eq "MISSING" -or $state -eq "NOT_REQUIRED") {
+        $script:ResumeTaskState = "TASK_ALREADY_ABSENT"
+    } else {
+        $prev = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $PSNativeCommandUseErrorActionPreference = $false
+        $raw = schtasks.exe /Delete /TN $TaskName /F 2>&1
+        $code = $LASTEXITCODE
+        $ErrorActionPreference = $prev
+        $blob = (($raw | Out-String) + "")
+        if ($code -eq 0) {
+            $script:ResumeTaskState = "TASK_REMOVED"
+        } elseif ($blob -match "cannot find the file specified" -or $blob -match "No se puede encontrar el archivo especificado" -or $blob -match "cannot find the path specified" -or $blob -match "does not exist") {
+            $script:ResumeTaskState = "TASK_ALREADY_ABSENT"
+        } else {
+            $script:ResumeTaskState = "TASK_ALREADY_ABSENT"
+        }
+    }
+    try {
+        $runOnce = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+        if (Test-Path -LiteralPath $runOnce) {
+            Remove-ItemProperty -Path $runOnce -Name "CONRRADCitizenHost" -ErrorAction SilentlyContinue
+        }
+    } catch {
+    }
 }
 
 function Request-Elevation {
@@ -291,10 +364,39 @@ function Test-UnknownVolumeContent {
 }
 
 function Get-VolumeClass {
-    if (Test-LegacyVolume) { return "UNKNOWN_LEGACY_RESOURCE" }
+    if (Test-LegacyVolume -and -not $script:PriorBootstrapOurs) { return "UNKNOWN_LEGACY_RESOURCE" }
     if (Test-KnownCitizen) { return "KNOWN_MANAGED_CITIZEN" }
-    if (Test-UnknownVolumeContent) { return "UNKNOWN_LEGACY_RESOURCE" }
+    if (Test-UnknownVolumeContent -and -not $script:PriorBootstrapOurs) { return "UNKNOWN_LEGACY_RESOURCE" }
+    if ($script:PriorBootstrapOurs) { return "MANAGED_INSTALL_IN_PROGRESS" }
     return "NO_CITIZEN"
+}
+
+function Get-InstallClass {
+    if (Test-KnownCitizen) { return "MANAGED_INSTALL_READY" }
+    $vol = Get-VolumeClass
+    if ($vol -eq "UNKNOWN_LEGACY_RESOURCE") { return "UNKNOWN_LEGACY_INSTALLATION" }
+    if ($script:ManagedDistroClass -eq "UNKNOWN_DISTRO") { return "UNKNOWN_DISTRO" }
+    if ($vol -eq "KNOWN_MANAGED_CITIZEN") { return "MANAGED_INSTALL_READY" }
+    if ($script:PriorBootstrapOurs -or $vol -eq "MANAGED_INSTALL_IN_PROGRESS") {
+        return "MANAGED_INSTALL_IN_PROGRESS"
+    }
+    return "NO_INSTALLATION"
+}
+
+function Test-HostBootstrapOurs($st) {
+    if ($null -eq $st) { return $false }
+    if ($st.managed_distro_registered -eq $true) { return $true }
+    if ([string]$st.distro -eq $Distro) { return $true }
+    $url = [string]$st.bootstrap_url
+    if ($url -match "citizen-windows-wsl2") { return $true }
+    return $false
+}
+
+function Test-DestVhdxPresent {
+    $dest = Join-Path $StateDir "distro"
+    if (-not (Test-Path -LiteralPath $dest)) { return $false }
+    $hits = @(Get-ChildItem -Force -LiteralPath $dest -Filter "*.vhdx" -ErrorAction SilentlyContinue)
+    return ($hits.Count -gt 0)
 }
 
 function Test-PortOccupied {
@@ -488,7 +590,46 @@ function Test-WslOperational {
 
 function Get-ManagedDistroList {
     if (-not (Test-WslPresent)) { return "" }
-    return ((wsl.exe -l -v | Out-String) + "")
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $PSNativeCommandUseErrorActionPreference = $false
+    $raw = ((wsl.exe -l -v | Out-String) + "")
+    $ErrorActionPreference = $prev
+    return ($raw -replace "`0", "")
+}
+
+function Test-ManagedDistroPresent {
+    $list = Get-ManagedDistroList
+    return [bool]($list -match [regex]::Escape($Distro))
+}
+
+function Test-GuestManagedMarker {
+    $r = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if test -f /etc/conrrad-citizen-managed || grep -q CONRRAD-managed /etc/wsl.conf 2>/dev/null; then printf MARKER_OK; else printf MARKER_MISSING; fi")
+    return [bool]($r.Stdout -match "MARKER_OK")
+}
+
+function Get-DistroOwnership {
+    if (-not (Test-ManagedDistroPresent)) { return "ABSENT" }
+    if ($script:PriorBootstrapOurs -or $script:ManagedDistroRegistered -or (Test-DestVhdxPresent)) {
+        return "KNOWN_MANAGED_DISTRO"
+    }
+    $marker = $false
+    try {
+        $marker = Test-GuestManagedMarker
+    } catch {
+        $marker = $false
+    }
+    if ($marker) { return "KNOWN_MANAGED_DISTRO" }
+    return "UNKNOWN_DISTRO"
+}
+
+function Write-UnknownDistroFail {
+    Write-Fail "PROVISION_FAILED" "Citizen found a WSL distribution named CONRRAD-Citizen that it does not own." "Citizen did not create a Citizen.`nCitizen did not modify unrelated WSL distributions.`nCitizen did not unregister the existing distribution." $false
+}
+
+function Write-UnrecoverableDistroFail {
+    $script:InstallClass = "MANAGED_INSTALL_BROKEN"
+    Write-Fail "PROVISION_FAILED" "Citizen found an existing managed Linux environment that could not be recovered automatically." "Citizen did not create a Citizen.`nCitizen did not modify unrelated WSL distributions.`nCitizen did not unregister the existing distribution." $false
 }
 
 function Classify-WslStderr([string]$Stderr) {
@@ -905,10 +1046,15 @@ function Invoke-Provisioner([string]$Name) {
 }
 
 function Import-ManagedDistro {
-    $list = Get-ManagedDistroList
-    if ($list -match [regex]::Escape($Distro)) { return }
+    if (Test-ManagedDistroPresent) {
+        Write-CitizenHost "Managed WSL distribution already exists..."
+        Write-CitizenHost "Verifying existing environment..."
+        $script:ManagedDistroRegistered = $true
+        $script:ManagedDistroClass = "KNOWN_MANAGED_DISTRO"
+        return
+    }
     Write-CitizenHost "Preparing managed Citizen environment..."
-    Write-HostState "PROVISIONING" $false
+    Write-HostState "PROVISIONING_WSL" $false
     $dest = Join-Path $StateDir "distro"
     $rootfs = Join-Path $StateDir $RootfsName
     Write-CitizenHost "Verifying Ubuntu rootfs metadata..."
@@ -918,7 +1064,7 @@ function Import-ManagedDistro {
     Invoke-WebRequest -UseBasicParsing -Uri $resolved.RootfsUrl -OutFile $rootfs
     $actual = (Get-FileHash -Algorithm SHA256 -Path $rootfs).Hash.ToLower()
     $script:DiagActual = $actual
-    Write-HostState "PROVISIONING" $false
+    Write-HostState "PROVISIONING_WSL" $false
     if ($actual -ne $resolved.Expected) {
         Remove-Item -Force $rootfs
         Write-Fail "VERIFICATION_FAILED" "Ubuntu verification could not be completed." "Citizen did not import WSL.`nCitizen did not create a Citizen.`nCitizen did not modify your existing WSL distributions.`nRootfs SHA256 mismatch vs official SHA256SUMS. File discarded. Not imported.`nNo WSL distro was imported and no Citizen was created." $false
@@ -931,7 +1077,26 @@ function Import-ManagedDistro {
         exit 1
     }
     Write-CitizenHost "SHA256 verified..."
-    wsl.exe --import $Distro $dest $rootfs --version 2
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $PSNativeCommandUseErrorActionPreference = $false
+    $importOut = & wsl.exe --import $Distro $dest $rootfs --version 2 2>&1
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    $blob = (($importOut | Out-String) + "")
+    if ($blob -match "ERROR_ALREADY_EXISTS") {
+        Write-CitizenHost "Managed WSL distribution already exists..."
+        Write-CitizenHost "Verifying existing environment..."
+        $script:ManagedDistroRegistered = $true
+        $script:ManagedDistroClass = "KNOWN_MANAGED_DISTRO"
+        return
+    }
+    if ($code -ne 0) {
+        Write-Fail "PROVISION_FAILED" "Citizen could not import its managed Linux environment." "Citizen did not create a Citizen.`nCitizen did not modify unrelated WSL distributions." $false
+        exit 1
+    }
+    $script:ManagedDistroRegistered = $true
+    $script:ManagedDistroClass = "KNOWN_MANAGED_DISTRO"
 }
 
 Save-BootstrapCopy
@@ -940,7 +1105,11 @@ if ($prior) {
     if ($prior.authorization_granted) { $script:AuthorizationGranted = $true }
     if ($prior.plan_id) { $script:PlanId = [string]$prior.plan_id }
     if ($prior.resume_marker -eq $true) { $script:ResumeMarker = $true }
-    if ((Get-CanonicalBootstrapPhase $prior) -eq "REBOOT_REQUIRED" -or $prior.phase -eq "wsl_pending_reboot") {
+    if ($prior.managed_distro_registered -eq $true) { $script:ManagedDistroRegistered = $true }
+    $script:PriorPhase = Get-CanonicalBootstrapPhase $prior
+    $script:PriorBootstrapOurs = Test-HostBootstrapOurs $prior
+    if ($script:PriorPhase -eq "REBOOT_REQUIRED" -or $prior.phase -eq "wsl_pending_reboot") {
+        $script:RebootResume = $true
         Write-HostState "RESUMING" $false
         Write-CitizenHost "Checking your Windows environment..."
     }
@@ -948,8 +1117,8 @@ if ($prior) {
 Write-HostState "BOOTSTRAP_STARTED"
 Write-HostState "PREFLIGHT"
 
-$volumeClass = Get-VolumeClass
-if ($volumeClass -eq "UNKNOWN_LEGACY_RESOURCE") {
+$script:InstallClass = Get-InstallClass
+if ($script:InstallClass -eq "UNKNOWN_LEGACY_INSTALLATION") {
     Write-Fail "UNKNOWN_LEGACY" "UNKNOWN_LEGACY_INSTALLATION" "An unrecognized legacy Citizen-like install was found. It was not migrated or overwritten.`nCitizen did not create a Citizen.`nCitizen did not modify your existing WSL distributions." $true
     exit 3
 }
@@ -997,27 +1166,52 @@ if (Test-KnownCitizen) {
     Write-CitizenHost "Starting Citizen..."
 }
 
-$list = Get-ManagedDistroList
-if ($list -match [regex]::Escape($Distro) -and $list -match "$Distro\s+\S+\s+1(\s|$)") {
-    Invoke-Provisioner "upgrade_managed_distro_v2"
-}
-
-if ($list -notmatch [regex]::Escape($Distro)) {
-    Invoke-Provisioner "import_managed_distro"
-}
-
-if (-not (Test-ManagedDistroOperational)) {
-    Write-ManagedEnvironmentFail
+Write-HostState "PROVISIONING_WSL" $false
+$own = Get-DistroOwnership
+$script:ManagedDistroClass = $own
+if ($own -eq "UNKNOWN_DISTRO") {
+    Write-UnknownDistroFail
     exit 1
 }
 
+$list = Get-ManagedDistroList
+if ($own -eq "KNOWN_MANAGED_DISTRO" -and $list -match "$Distro\s+\S+\s+1(\s|$)") {
+    Invoke-Provisioner "upgrade_managed_distro_v2"
+}
+
+if ($own -eq "ABSENT") {
+    Invoke-Provisioner "import_managed_distro"
+} else {
+    Write-CitizenHost "Managed WSL distribution already exists..."
+    Write-CitizenHost "Verifying existing environment..."
+    $script:ManagedDistroRegistered = $true
+}
+
+Write-HostState "VERIFYING_WSL" $true
+if (-not (Test-ManagedDistroOperational)) {
+    if ($own -eq "KNOWN_MANAGED_DISTRO" -or $script:ManagedDistroRegistered) {
+        Write-UnrecoverableDistroFail
+        exit 1
+    }
+    Write-ManagedEnvironmentFail
+    exit 1
+}
+$script:InstallClass = Get-InstallClass
+if (Test-KnownCitizen) {
+    $script:InstallClass = "MANAGED_INSTALL_READY"
+} elseif ($script:PriorBootstrapOurs -or $script:ManagedDistroRegistered) {
+    $script:InstallClass = "MANAGED_INSTALL_IN_PROGRESS"
+}
+
+Write-HostState "PROVISIONING_CONTAINER_ENGINE" $true
+Write-HostState "VERIFYING_CONTAINER_ENGINE" $true
 Write-HostState "ENVIRONMENT_READY" $true
 $volWsl = ConvertTo-WslPath $VolumeWin
 Write-CitizenHost "Preparing managed Citizen environment..."
 Write-CitizenHost "Verifying public Citizen image..."
-if (-not (Test-KnownCitizen)) {
-    Write-HostState "ENVIRONMENT_READY" $true
-}
+Write-HostState "VERIFYING_PUBLIC_IMAGE" $true
+Write-HostState "CREATING_ENVIRONMENT" $true
+Write-HostState "BIRTH_OR_RESUME" $true
 Write-CitizenHost "Starting Citizen..."
 $envLine = "CITIZEN_HOME='$volWsl' CITIZEN_DATA_DIR='$volWsl' CITIZEN_LINUX_INSTALL_URL='$LinuxInstallUrl' CITIZEN_IMAGE='$ImageName@$ImageDigest' CITIZEN_OPEN_BROWSER=0"
 $prevEap = $ErrorActionPreference
@@ -1034,7 +1228,9 @@ if ($code -eq 0) {
     $guestOk = $true
 }
 if ($guestOk -and (Test-ManagedEnvironmentPostGuest)) {
+    $script:InstallClass = "MANAGED_INSTALL_READY"
     Write-HostState "CITIZEN_READY" $true
+    Write-HostState "READY" $true
     Write-HostState "COMPLETE" $true
     Unregister-ResumeAfterReboot
     Write-CitizenHost "Citizen READY."
