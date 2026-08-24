@@ -10,31 +10,35 @@ Those are not the same number.
 `INSTALL` = Birth / Resume.
 `SYNC` = Evolution. Install never Syncs automatically.
 
-Requirements: Python **3.11+**, `curl`, `sha256sum`.
+Requirements: Linux. `curl`. The installer prepares isolation infrastructure.
 
 Do **not** run `pip install conrrad-citizen`. PyPI still serves 0.4.1.
-Do **not** use `main` as the install URL. Use tag `citizen-runtime-0.4.2.1`.
+Do **not** install Citizen into host Python or a venv.
+Do **not** use `main` as the install URL. Use tag `citizen-managed-0.4.2.1`.
 
 ## Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-runtime-0.4.2.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-managed-0.4.2.1/install.sh | bash
 ```
 
 This is the primary public command. It:
 
-1. downloads `conrrad_citizen-0.4.2.1-py3-none-any.whl` from the immutable tag
-2. verifies SHA256 `fe8f06d10219655bd0ebf84a1f8a08c955d65fa22a76316c3887d29fcede51e9`
-3. prepares an isolated venv (creates it if missing; does not `rm -rf` an existing one)
-4. runs `citizen install`
-5. reaches the READY path without Sync
+1. prepares host isolation if it is missing
+2. obtains the immutable Citizen environment image (`ghcr.io/grecoitalico/citizen@sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da`)
+3. verifies the image digest
+4. creates or reuses the persistent Citizen volume
+5. starts the managed environment
+6. Birth (empty volume) or Resume (existing sealed identity)
+7. reaches READY without Sync
 
-It does not kill port 3434, does not kill Python processes, does not
-`pip uninstall` first, and does not call `citizen sync`.
+The wheel SHA256 `fe8f06d10219655bd0ebf84a1f8a08c955d65fa22a76316c3887d29fcede51e9`
+is verified when the image is built. The installer does not pip-install it
+onto the host.
+
+It does not kill port 3434, does not kill processes, and does not call Sync.
 
 Then open http://127.0.0.1:3434/
-
-Linux host: `citizen start` / `citizen status` (systemd user unit when available).
 
 ## Windows
 
@@ -75,9 +79,9 @@ Do not use it for a new install. Its install path auto-Synced.
 
 ## Recovery
 
-- Port 3434 in use: do not kill other processes. Set `CITIZEN_UI_PORT` and run `citizen serve`, or free the port yourself
-- Linux service not running: `citizen start`
-- UI cannot connect: confirm `citizen status` or that `citizen serve` is running
+- Port 3434 in use: do not kill other processes. Free the port yourself.
+- Environment not running: re-run the one-line installer (Resume)
+- UI cannot connect: confirm http://127.0.0.1:3434/api/living
 - Sync failure: current Citizen is preserved; do not reinstall to recover
 
 `citizen uninstall --purge` destroys identity and Evidence. That is not recovery.

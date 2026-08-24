@@ -1,0 +1,17 @@
+{
+  "package_version": "0.4.2.1",
+  "runtime_version": "0.4.2",
+  "wheel_name": "conrrad_citizen-0.4.2.1-py3-none-any.whl",
+  "wheel_sha256": "fe8f06d10219655bd0ebf84a1f8a08c955d65fa22a76316c3887d29fcede51e9",
+  "expected_wheel_sha256": "fe8f06d10219655bd0ebf84a1f8a08c955d65fa22a76316c3887d29fcede51e9",
+  "source_repository": "GRECOITALICO/CONRRAD-CITIZEN",
+  "source_commit": "046ba1e30e7ffcb699769ab72af8c9f7b057283b",
+  "publication_repository": "GRECOITALICO/citizen",
+  "image": "ghcr.io/grecoitalico/citizen",
+  "image_tag": "0.4.2.1",
+  "image_digest": "sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da",
+  "local_image": "localhost/conrrad-citizen:0.4.2.1-local",
+  "build_timestamp": "2026-08-24T15:07:36Z",
+  "signing": "none / image digest + wheel SHA256. Not production cryptographic signing.",
+  "note": "Image digest identifies the environment artifact. It is not a Citizen version."
+}

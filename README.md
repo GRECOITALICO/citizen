@@ -8,15 +8,19 @@ keeps History, and can later Sync without becoming someone else.
 ### Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-runtime-0.4.2.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-managed-0.4.2.1/install.sh | bash
 ```
 
-That command fetches package **0.4.2.1** from the immutable tag
-`citizen-runtime-0.4.2.1`, verifies SHA256, prepares an isolated venv,
-and runs `citizen install`.
+That command is the public one-line installer. Trust reference: immutable tag
+`citizen-managed-0.4.2.1` — not `main`.
 
-`citizen install` = **Birth** (first time) or **Resume** (existing identity).
-It does **not** Sync.
+It prepares host isolation if needed, verifies the immutable Citizen
+environment image, creates or reuses the persistent Citizen volume, and
+starts the managed environment. Birth happens only on an empty volume.
+Resume reuses the existing identity. It does **not** Sync.
+
+The wheel `conrrad_citizen-0.4.2.1-py3-none-any.whl` is an image build
+input. It is not installed into host Python.
 
 Then open http://127.0.0.1:3434/
 
@@ -48,22 +52,25 @@ These are not the same number.
 `SYNC` = Evolution. Explicit. Never automatic during install.
 
 Do not use `pip install conrrad-citizen` from PyPI. That still resolves to 0.4.1.
+Do not install Citizen into host Python, a venv, or systemd.
 
-Do not use `main` as the install trust reference. Use tag `citizen-runtime-0.4.2.1`.
+Do not use `main` as the install trust reference. Use tag `citizen-managed-0.4.2.1`.
+The frozen wheel tag `citizen-runtime-0.4.2.1` remains the immutable wheel bytes.
 
 ## After install
 
-- `citizen status` — living Citizen vs runtime
-- `citizen work` — documented Work
-- `citizen sync` — evolution when a verified package is available
+Open http://127.0.0.1:3434/
+
+The host command `citizen` is a dispatcher into the managed environment when
+isolation is available. Sync remains explicit from that command or the UI.
 
 Failed Sync leaves the current Citizen in place.
 
 ## Recovery
 
-- Port 3434 in use: do not kill other processes. Use `CITIZEN_UI_PORT` and `citizen serve`, or free the port yourself
-- Linux service not running: `citizen start`
-- UI cannot connect: confirm `citizen status` or that `citizen serve` is running
+- Port 3434 in use: do not kill other processes. Free the port yourself.
+- Environment not running: re-run the one-line installer (Resume, not Birth)
+- UI cannot connect: confirm http://127.0.0.1:3434/api/living
 - Sync failure: current Citizen is preserved; do not reinstall to recover
 
 `citizen uninstall --purge` destroys identity and Evidence. That is not recovery.
@@ -72,17 +79,15 @@ See [INSTALL.md](INSTALL.md) for the same product path.
 
 ## Advanced
 
-Manual wheel install (not the first-user path):
+The frozen wheel remains at tag `citizen-runtime-0.4.2.1`. It is an OCI
+image build input, not a host pip install.
 
-```bash
-WHEEL=conrrad_citizen-0.4.2.1-py3-none-any.whl
-URL=https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-runtime-0.4.2.1/release/0.4.2.1/${WHEEL}
-curl -fsS --max-redirs 0 -o "$WHEEL" "$URL"
-echo "fe8f06d10219655bd0ebf84a1f8a08c955d65fa22a76316c3887d29fcede51e9  $WHEEL" | sha256sum -c
-python3 -m venv ~/.local/share/conrrad-citizen/venv
-~/.local/share/conrrad-citizen/venv/bin/pip install "./$WHEEL"
-~/.local/share/conrrad-citizen/venv/bin/citizen install
-```
+Image provenance: [isolation/IMAGE_PROVENANCE.json](isolation/IMAGE_PROVENANCE.json)
+and [release/0.4.2.1/IMAGE_PROVENANCE.json](release/0.4.2.1/IMAGE_PROVENANCE.json).
+
+The previous venv installer is retained only as
+[historical/install-0.4.2.1-venv.sh](historical/install-0.4.2.1-venv.sh).
+It is not the primary command.
 
 Frozen 0.4.2 (`conrrad_citizen-0.4.2-py3-none-any.whl`, SHA256
 `0b4eb6d336352901e783f747bc5f2cc1775f0822ec1be17c145143ea6a4457ce`,
