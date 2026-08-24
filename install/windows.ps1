@@ -1,16 +1,16 @@
 # CONRRAD Citizen — public Windows host bootstrap (WSL2).
 # One instruction. Self-elevates. Resumes after reboot. Never Sync.
 #
-# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.4/install/windows.ps1 | iex"
+# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.5/install/windows.ps1 | iex"
 #
 # Windows is Host infrastructure. WSL2 is Host infrastructure.
 # The managed Linux environment is the runtime boundary.
 # Citizen is the same product certified on Linux.
 param()
 $ErrorActionPreference = "Stop"
-$PublicTag = "citizen-windows-wsl2-0.4.2.4"
+$PublicTag = "citizen-windows-wsl2-0.4.2.5"
 $LinuxInstallTag = "citizen-managed-0.4.2.1"
-$InstallerVersion = "0.4.2.4"
+$InstallerVersion = "0.4.2.5"
 $PublicOrigin = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$PublicTag"
 $BootstrapUrl = "$PublicOrigin/install/windows.ps1"
 $GuestUrl = "$PublicOrigin/install/windows-guest.sh"
@@ -41,6 +41,17 @@ $script:DiagShaContentLength = ""
 $script:DiagChecksumFound = $false
 $script:DiagExpected = ""
 $script:DiagActual = ""
+$script:WslProbe = ""
+$script:WslProbeExitCode = ""
+$script:WslProbeStderrClass = ""
+$script:WslExecution = ""
+$script:SystemdUserSession = ""
+$script:FilesystemProbe = ""
+$script:BashProbe = ""
+$script:ContainerEngineProbe = ""
+$script:NetworkProbe = ""
+$script:ManagedUserProbe = ""
+$script:SystemdProductRequirement = "FALSE"
 New-Item -ItemType Directory -Force -Path (Join-Path $StateDir "install") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $StateDir "distro") | Out-Null
 New-Item -ItemType Directory -Force -Path $VolumeWin | Out-Null
@@ -121,6 +132,17 @@ function Write-HostState {
         CHECKSUM_SOURCE_FOUND = $script:DiagChecksumFound
         EXPECTED_SHA256 = $script:DiagExpected
         ACTUAL_SHA256 = $script:DiagActual
+        WSL_PROBE = $script:WslProbe
+        WSL_PROBE_EXIT_CODE = $script:WslProbeExitCode
+        WSL_PROBE_STDERR_CLASS = $script:WslProbeStderrClass
+        WSL_EXECUTION = $script:WslExecution
+        SYSTEMD_USER_SESSION = $script:SystemdUserSession
+        FILESYSTEM_PROBE = $script:FilesystemProbe
+        BASH_PROBE = $script:BashProbe
+        CONTAINER_ENGINE_PROBE = $script:ContainerEngineProbe
+        NETWORK_PROBE = $script:NetworkProbe
+        MANAGED_USER_PROBE = $script:ManagedUserProbe
+        SYSTEMD_PRODUCT_REQUIREMENT = $script:SystemdProductRequirement
     }
     $payload | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $StateFile
 }
@@ -469,6 +491,176 @@ function Get-ManagedDistroList {
     return ((wsl.exe -l -v | Out-String) + "")
 }
 
+function Classify-WslStderr([string]$Stderr) {
+    if ([string]::IsNullOrWhiteSpace($Stderr)) { return "" }
+    if ($Stderr -match "CreateProcess|0xc0000142|WSL_E_") { return "CREATE_PROCESS_FAILURE" }
+    if ($Stderr -match "Exec format error|cannot execute") { return "BIN_EXEC_FAILURE" }
+    if ($Stderr -match "Read-only file system|No space left on device") { return "FILESYSTEM_FAILURE" }
+    if ($Stderr -match "Failed to start the systemd user session") { return "SYSTEMD_USER_SESSION_WARNING" }
+    if ($Stderr -match "No such file or directory") { return "BIN_EXEC_FAILURE" }
+    return "UNKNOWN"
+}
+
+function Set-WslProbeMeta([string]$Name, $Result) {
+    $script:WslProbe = $Name
+    $script:WslProbeExitCode = [string]$Result.ExitCode
+    $script:WslProbeStderrClass = Classify-WslStderr $Result.Stderr
+    if ($script:WslProbeStderrClass -eq "SYSTEMD_USER_SESSION_WARNING") {
+        $script:SystemdUserSession = "DEGRADED"
+    }
+}
+
+function Invoke-WslExec {
+    param([Parameter(Mandatory = $true)][string[]]$WslArgs)
+    $PSNativeCommandUseErrorActionPreference = $false
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $stdoutParts = New-Object System.Collections.Generic.List[string]
+    $stderrParts = New-Object System.Collections.Generic.List[string]
+    $code = 1
+    try {
+        $raw = & wsl.exe @WslArgs 2>&1
+        $code = $LASTEXITCODE
+        if ($null -eq $code) { $code = 0 }
+        foreach ($item in @($raw)) {
+            if ($null -eq $item) { continue }
+            if ($item -is [System.Management.Automation.ErrorRecord]) {
+                $msg = [string]$item
+                if ($item.Exception -and $item.Exception.Message) {
+                    $msg = [string]$item.Exception.Message
+                }
+                [void]$stderrParts.Add($msg)
+            } else {
+                $s = [string]$item
+                if ($s -match '(?i)^wsl:\s' -or $s -match "Failed to start the systemd user session") {
+                    [void]$stderrParts.Add($s)
+                } else {
+                    [void]$stdoutParts.Add($s)
+                }
+            }
+        }
+    } catch {
+        if ($LASTEXITCODE) { $code = [int]$LASTEXITCODE } else { $code = 1 }
+        [void]$stderrParts.Add([string]$_)
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    return [pscustomobject]@{
+        ExitCode = [int]$code
+        Stdout = ($stdoutParts -join "`n")
+        Stderr = ($stderrParts -join "`n")
+    }
+}
+
+function Test-WslBinTrueFatal($Result) {
+    $cls = Classify-WslStderr $Result.Stderr
+    if ($cls -eq "CREATE_PROCESS_FAILURE") { return $true }
+    if ($cls -eq "BIN_EXEC_FAILURE") { return $true }
+    if ($cls -eq "FILESYSTEM_FAILURE") { return $true }
+    return $false
+}
+
+function Write-ManagedEnvironmentFail {
+    Write-Fail "PROVISION_FAILED" "Citizen could not start its managed Linux environment." "Citizen did not create a Citizen.`nCitizen did not modify unrelated WSL distributions." $false
+}
+
+function Ensure-ManagedLinuxUser {
+    $cmd = "if ! id -u citizen >/dev/null 2>&1; then useradd -m -s /bin/bash citizen; fi; grep -q '^citizen:' /etc/subuid 2>/dev/null || echo 'citizen:100000:65536' >> /etc/subuid; grep -q '^citizen:' /etc/subgid 2>/dev/null || echo 'citizen:100000:65536' >> /etc/subgid; if id -u citizen >/dev/null 2>&1; then printf USER_OK; else printf USER_FAIL; fi"
+    $r = Invoke-WslExec @("-d", $Distro, "-u", "root", "--exec", "/bin/bash", "-lc", $cmd)
+    Set-WslProbeMeta "ensure_managed_user" $r
+    return ($r.Stdout -match "USER_OK")
+}
+
+function Test-ManagedEnvironmentPostGuest {
+    $engine = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if command -v podman >/dev/null 2>&1; then printf ENGINE_OK; else printf ENGINE_FAIL; fi")
+    Set-WslProbeMeta "container_engine" $engine
+    if ($engine.Stdout -notmatch "ENGINE_OK") {
+        $script:ContainerEngineProbe = "FAIL"
+        return $false
+    }
+    $script:ContainerEngineProbe = "PASS"
+    $user = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if id -u citizen >/dev/null 2>&1; then printf USER_OK; else printf USER_MISSING; fi")
+    Set-WslProbeMeta "managed_user" $user
+    if ($user.Stdout -notmatch "USER_OK") {
+        $script:ManagedUserProbe = "FAIL"
+        return $false
+    }
+    $script:ManagedUserProbe = "PASS"
+    $rootless = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if grep -q '^citizen:' /etc/subuid; then printf ROOTLESS_OK; else printf ROOTLESS_FAIL; fi")
+    Set-WslProbeMeta "rootless" $rootless
+    if ($rootless.Stdout -notmatch "ROOTLESS_OK") {
+        $script:ContainerEngineProbe = "FAIL"
+        return $false
+    }
+    return $true
+}
+
+function Test-ManagedDistroOperational {
+    # Capability probes. WSL systemd user-session health is not Citizen health.
+    # SYSTEMD_PRODUCT_REQUIREMENT=FALSE — do not disable systemd blindly.
+    $script:SystemdProductRequirement = "FALSE"
+    $trueProbe = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/true")
+    Set-WslProbeMeta "bin_true" $trueProbe
+    if (Test-WslBinTrueFatal $trueProbe) {
+        $script:WslExecution = "UNAVAILABLE"
+        return $false
+    }
+    $bash = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "printf READY")
+    Set-WslProbeMeta "bash_ready" $bash
+    if ($bash.Stdout -notmatch "READY") {
+        $script:WslExecution = "UNAVAILABLE"
+        $script:BashProbe = "FAIL"
+        return $false
+    }
+    $script:BashProbe = "PASS"
+    $script:WslExecution = "AVAILABLE"
+    if (-not $script:SystemdUserSession) { $script:SystemdUserSession = "OK" }
+    $bashx = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if test -x /bin/bash; then printf BASH_OK; else printf BASH_FAIL; fi")
+    Set-WslProbeMeta "bash_exec" $bashx
+    if ($bashx.Stdout -notmatch "BASH_OK") {
+        $script:BashProbe = "FAIL"
+        $script:WslExecution = "UNAVAILABLE"
+        return $false
+    }
+    $idProbe = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "id")
+    Set-WslProbeMeta "id" $idProbe
+    if ($idProbe.Stdout -notmatch "uid=") {
+        $script:WslExecution = "UNAVAILABLE"
+        return $false
+    }
+    $fs = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if test -w /tmp; then printf FS_OK; else printf FS_FAIL; fi")
+    Set-WslProbeMeta "filesystem" $fs
+    if ($fs.Stdout -notmatch "FS_OK") {
+        $script:FilesystemProbe = "FAIL"
+        return $false
+    }
+    $script:FilesystemProbe = "PASS"
+    $user = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if id -u citizen >/dev/null 2>&1; then printf USER_OK; else printf USER_MISSING; fi")
+    Set-WslProbeMeta "managed_user" $user
+    if ($user.Stdout -match "USER_OK") {
+        $script:ManagedUserProbe = "PASS"
+    } else {
+        $script:ManagedUserProbe = "MISSING"
+        if (-not (Ensure-ManagedLinuxUser)) { return $false }
+        $script:ManagedUserProbe = "PASS"
+    }
+    $engine = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if command -v podman >/dev/null 2>&1; then printf ENGINE_OK; else printf ENGINE_FAIL; fi")
+    Set-WslProbeMeta "container_engine" $engine
+    if ($engine.Stdout -match "ENGINE_OK") {
+        $script:ContainerEngineProbe = "PASS"
+    } else {
+        $script:ContainerEngineProbe = "PENDING"
+    }
+    $net = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if getent ahosts ghcr.io >/dev/null 2>&1 || getent hosts ghcr.io >/dev/null 2>&1 || (test -r /etc/resolv.conf && grep -q nameserver /etc/resolv.conf); then printf NET_OK; else printf NET_FAIL; fi")
+    Set-WslProbeMeta "network" $net
+    if ($net.Stdout -notmatch "NET_OK") {
+        $script:NetworkProbe = "FAIL"
+        return $false
+    }
+    $script:NetworkProbe = "PASS"
+    return $true
+}
+
 function Show-AuthorizationScreen {
     Write-CitizenHost "Windows needs permission to continue."
     Write-Host ""
@@ -564,8 +756,8 @@ function Invoke-RequirementDetect($Item) {
             if (-not (Test-WslOperational)) { return "MISSING" }
             $list = Get-ManagedDistroList
             if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
-            wsl.exe -d $Distro --exec /usr/bin/id -u citizen 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) { return "VERIFIED" }
+            $r = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if id -u citizen >/dev/null 2>&1; then printf USER_OK; else printf USER_MISSING; fi")
+            if ($r.Stdout -match "USER_OK") { return "VERIFIED" }
             return "MISSING"
         }
         "linux_network" {
@@ -590,16 +782,16 @@ function Invoke-RequirementDetect($Item) {
             if (-not (Test-WslOperational)) { return "MISSING" }
             $list = Get-ManagedDistroList
             if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
-            wsl.exe -d $Distro --exec /bin/bash -lc "command -v podman >/dev/null" 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) { return "VERIFIED" }
+            $r = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if command -v podman >/dev/null 2>&1; then printf ENGINE_OK; else printf ENGINE_FAIL; fi")
+            if ($r.Stdout -match "ENGINE_OK") { return "VERIFIED" }
             return "MISSING"
         }
         "rootless_prerequisites" {
             if (-not (Test-WslOperational)) { return "MISSING" }
             $list = Get-ManagedDistroList
             if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
-            wsl.exe -d $Distro --exec /bin/bash -lc "grep -q '^citizen:' /etc/subuid" 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) { return "VERIFIED" }
+            $r = Invoke-WslExec @("-d", $Distro, "--exec", "/bin/bash", "-lc", "if grep -q '^citizen:' /etc/subuid; then printf ROOTLESS_OK; else printf ROOTLESS_FAIL; fi")
+            if ($r.Stdout -match "ROOTLESS_OK") { return "VERIFIED" }
             return "MISSING"
         }
         "public_ghcr_access" {
@@ -814,9 +1006,8 @@ if ($list -notmatch [regex]::Escape($Distro)) {
     Invoke-Provisioner "import_managed_distro"
 }
 
-$probe = (wsl.exe -d $Distro --exec /bin/true 2>&1 | Out-String)
-if ($LASTEXITCODE -ne 0) {
-    Write-Fail "PROVISION_FAILED" "The managed Citizen environment could not run." "Citizen did not create a Citizen.`nManaged distro $Distro cannot execute commands. No Citizen was born." $false
+if (-not (Test-ManagedDistroOperational)) {
+    Write-ManagedEnvironmentFail
     exit 1
 }
 
@@ -829,16 +1020,31 @@ if (-not (Test-KnownCitizen)) {
 }
 Write-CitizenHost "Starting Citizen..."
 $envLine = "CITIZEN_HOME='$volWsl' CITIZEN_DATA_DIR='$volWsl' CITIZEN_LINUX_INSTALL_URL='$LinuxInstallUrl' CITIZEN_IMAGE='$ImageName@$ImageDigest' CITIZEN_OPEN_BROWSER=0"
-Get-Content -Raw -LiteralPath $GuestPath | wsl.exe -d $Distro --exec /bin/bash -lc "export $envLine; /bin/bash -s"
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$guestOut = Get-Content -Raw -LiteralPath $GuestPath | & wsl.exe -d $Distro --exec /bin/bash -lc "export $envLine; /bin/bash -s" 2>&1
 $code = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+$guestBlob = ($guestOut | Out-String)
+Set-WslProbeMeta "guest_bootstrap" ([pscustomobject]@{ ExitCode = $code; Stdout = $guestBlob; Stderr = $guestBlob })
+$guestOk = $false
 if ($code -eq 0) {
+    $guestOk = $true
+} elseif ((Classify-WslStderr $guestBlob) -eq "SYSTEMD_USER_SESSION_WARNING") {
+    $guestOk = $true
+}
+if ($guestOk -and (Test-ManagedEnvironmentPostGuest)) {
     Write-HostState "CITIZEN_READY" $true
     Write-HostState "COMPLETE" $true
     Unregister-ResumeAfterReboot
     Write-CitizenHost "Citizen READY."
     Write-Host "http://127.0.0.1:3434/"
     Start-Process "http://127.0.0.1:3434/"
-} else {
-    Write-Fail "PROVISION_FAILED" "Citizen could not be started." "Citizen did not complete Birth or Resume.`nNo additional command is required right now." $false
+    exit 0
 }
-exit $code
+if (-not $guestOk) {
+    Write-Fail "PROVISION_FAILED" "Citizen could not be started." "Citizen did not complete Birth or Resume.`nNo additional command is required right now." $false
+    exit $code
+}
+Write-ManagedEnvironmentFail
+exit 1
