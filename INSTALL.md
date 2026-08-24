@@ -47,10 +47,10 @@ Then open http://127.0.0.1:3434/
 STATUS=IMPLEMENTED / REAL VALIDATION PENDING
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.2/install/windows.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.3/install/windows.ps1 | iex"
 ```
 
-Trust reference: tag `citizen-windows-wsl2-0.4.2.2` — not `main`.
+Trust reference: tag `citizen-windows-wsl2-0.4.2.3` — not `main`.
 
 This is the same Citizen as Linux. It:
 

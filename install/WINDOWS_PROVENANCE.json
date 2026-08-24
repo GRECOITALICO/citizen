@@ -1,11 +1,13 @@
 {
   "public_repository": "GRECOITALICO/citizen",
-  "public_tag": "citizen-windows-wsl2-0.4.2.2",
+  "public_tag": "citizen-windows-wsl2-0.4.2.3",
   "bootstrap_path": "install/windows.ps1",
   "guest_path": "install/windows-guest.sh",
+  "requirements_path": "install/windows/requirements.json",
   "linux_install_tag": "citizen-managed-0.4.2.1",
   "linux_install_url": "https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-managed-0.4.2.1/install.sh",
-  "bootstrap_url": "https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.2/install/windows.ps1",
+  "bootstrap_url": "https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.3/install/windows.ps1",
+  "requirements_url": "https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.3/install/windows/requirements.json",
   "image": "ghcr.io/grecoitalico/citizen",
   "image_digest": "sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da",
   "managed_distro": "CONRRAD-Citizen",
@@ -15,9 +17,12 @@
   "rootfs_checksum": "https://cloud-images.ubuntu.com/wsl/releases/24.04/current/SHA256SUMS",
   "rootfs_checksum_equivalent": "https://cloud-images.ubuntu.com/wsl/releases/noble/current/SHA256SUMS",
   "uac_internal_automation": true,
+  "user_runs_as_admin_manually": false,
   "reboot_resume": true,
   "second_paste_required": false,
+  "rootfs_verification_strict": true,
+  "public_image_digest_pinned": true,
   "windows_certified": false,
   "real_windows_e2e": false,
-  "note": "P0.9H.2B self-diagnosing public Windows bootstrap. Certification remains P0.9H.2 on a real Windows machine."
+  "note": "P0.9H.2C Windows requirements planner and permission broker. Certification remains P0.9H.2 on a real Windows machine."
 }

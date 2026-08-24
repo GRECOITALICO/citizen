@@ -1,18 +1,20 @@
 # CONRRAD Citizen — public Windows host bootstrap (WSL2).
 # One instruction. Self-elevates. Resumes after reboot. Never Sync.
 #
-# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.2/install/windows.ps1 | iex"
+# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.3/install/windows.ps1 | iex"
 #
 # Windows is Host infrastructure. WSL2 is Host infrastructure.
 # The managed Linux environment is the runtime boundary.
 # Citizen is the same product certified on Linux.
 param()
 $ErrorActionPreference = "Stop"
-$PublicTag = "citizen-windows-wsl2-0.4.2.2"
+$PublicTag = "citizen-windows-wsl2-0.4.2.3"
 $LinuxInstallTag = "citizen-managed-0.4.2.1"
+$InstallerVersion = "0.4.2.3"
 $PublicOrigin = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$PublicTag"
 $BootstrapUrl = "$PublicOrigin/install/windows.ps1"
 $GuestUrl = "$PublicOrigin/install/windows-guest.sh"
+$RequirementsUrl = "$PublicOrigin/install/windows/requirements.json"
 $LinuxInstallUrl = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$LinuxInstallTag/install.sh"
 $ImageName = "ghcr.io/grecoitalico/citizen"
 $ImageDigest = "sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da"
@@ -23,7 +25,13 @@ $VolumeWin = Join-Path $env:LOCALAPPDATA "CONRRAD\Citizen"
 $StateFile = Join-Path $StateDir "bootstrap.json"
 $SelfPath = Join-Path $StateDir "install\windows.ps1"
 $GuestPath = Join-Path $StateDir "install\windows-guest.sh"
+$RequirementsPath = Join-Path $StateDir "install\requirements.json"
 $TaskName = "CONRRAD Citizen Host Resume"
+$script:BootstrapPhase = "BOOTSTRAP_STARTED"
+$script:PlanId = ""
+$script:ResumeMarker = $false
+$script:AuthorizationGranted = $false
+$script:RequirementsState = @{}
 $script:DiagPhase = "start"
 $script:DiagShaUrl = ""
 $script:DiagShaStatus = ""
@@ -55,11 +63,46 @@ function ConvertTo-WslPath([string]$WinPath) {
     return $p
 }
 
-function Write-HostState([string]$Phase, [bool]$Wsl2 = $false) {
+function Get-LegacyPhaseAlias([string]$Phase) {
+    switch ($Phase) {
+        "AUTHORIZATION_REQUIRED" { return "wsl_enable_requested" }
+        "PROVISIONING" { return "wsl_enable_requested" }
+        "REBOOT_REQUIRED" { return "wsl_pending_reboot" }
+        "RESUMING" { return "wsl_ready" }
+        "ENVIRONMENT_READY" { return "runtime_provisioning" }
+        "CITIZEN_READY" { return "ready" }
+        "COMPLETE" { return "ready" }
+        "UNKNOWN_LEGACY" { return "failed" }
+        "PORT_CONFLICT" { return "failed" }
+        "UNSUPPORTED_HOST" { return "failed" }
+        "USER_DECLINED" { return "failed" }
+        "PROVISION_FAILED" { return "failed" }
+        "VERIFICATION_FAILED" { return "failed" }
+        "REBOOT_RESUME_FAILED" { return "failed" }
+        default { return $Phase }
+    }
+}
+
+function Write-HostState {
+    param(
+        [string]$Phase,
+        [bool]$Wsl2 = $false
+    )
+    $script:BootstrapPhase = $Phase
     $script:DiagPhase = $Phase
-    @{
-        phase = $Phase
+    $script:ResumeMarker = @(
+        "AUTHORIZATION_REQUIRED", "PROVISIONING", "REBOOT_REQUIRED", "RESUMING"
+    ) -contains $Phase
+    $payload = [ordered]@{
+        bootstrap_phase = $Phase
         BOOTSTRAP_PHASE = $Phase
+        phase = (Get-LegacyPhaseAlias $Phase)
+        plan_id = $script:PlanId
+        resume_marker = $script:ResumeMarker
+        installer_version = $InstallerVersion
+        timestamp = [DateTime]::UtcNow.ToString("o")
+        authorization_granted = [bool]$script:AuthorizationGranted
+        requirements_state = $script:RequirementsState
         distro = $Distro
         wsl2 = $Wsl2
         bootstrap_url = $BootstrapUrl
@@ -73,7 +116,17 @@ function Write-HostState([string]$Phase, [bool]$Wsl2 = $false) {
         CHECKSUM_SOURCE_FOUND = $script:DiagChecksumFound
         EXPECTED_SHA256 = $script:DiagExpected
         ACTUAL_SHA256 = $script:DiagActual
-    } | ConvertTo-Json | Set-Content -Encoding utf8 $StateFile
+    }
+    $payload | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $StateFile
+}
+
+function Read-HostState {
+    if (-not (Test-Path -LiteralPath $StateFile)) { return $null }
+    try {
+        return (Get-Content -Raw -LiteralPath $StateFile | ConvertFrom-Json)
+    } catch {
+        return $null
+    }
 }
 
 function Save-BootstrapCopy {
@@ -104,6 +157,24 @@ function Save-BootstrapCopy {
             }
         }
     }
+    $copiedReq = $false
+    if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
+        $here = Split-Path -Parent $PSCommandPath
+        $sib = Join-Path $here "requirements.json"
+        if (Test-Path -LiteralPath $sib) {
+            Copy-Item -LiteralPath $sib -Destination $RequirementsPath -Force
+            $copiedReq = $true
+        }
+    }
+    if (-not $copiedReq) {
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri $RequirementsUrl -OutFile $RequirementsPath
+        } catch {
+            if (-not (Test-Path -LiteralPath $RequirementsPath)) {
+                throw "Could not persist the Windows requirements manifest from $RequirementsUrl"
+            }
+        }
+    }
 }
 
 function Register-ResumeAfterReboot {
@@ -119,19 +190,38 @@ function Unregister-ResumeAfterReboot {
 }
 
 function Request-Elevation {
-    Write-HostState "wsl_enable_requested"
+    Write-HostState "AUTHORIZATION_REQUIRED"
     Save-BootstrapCopy
     $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$SelfPath`""
-    $p = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $arg -Wait -PassThru
-    if (-not $p) { exit 2 }
+    try {
+        $p = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $arg -Wait -PassThru
+    } catch {
+        Write-Fail "USER_DECLINED" "Windows permission was not granted." "Citizen did not enable Windows features.`nCitizen did not create a Citizen.`nCitizen did not modify your existing WSL distributions." $false
+        exit 2
+    }
+    if (-not $p) {
+        Write-Fail "USER_DECLINED" "Windows permission was not granted." "Citizen did not enable Windows features.`nCitizen did not create a Citizen.`nCitizen did not modify your existing WSL distributions." $false
+        exit 2
+    }
     exit $p.ExitCode
 }
 
 function Write-PendingReboot {
-    Write-HostState "wsl_pending_reboot" $false
+    Write-HostState "REBOOT_REQUIRED" $false
     Register-ResumeAfterReboot
     Write-Host "Reboot required. Citizen has not been created yet."
     Write-Host "The installation will resume automatically after Windows starts."
+}
+
+function Write-Fail([string]$Phase, [string]$What, [string]$DidNot, [bool]$ActionRequired) {
+    Write-HostState $Phase $false
+    Write-Host $What
+    if ($DidNot) { Write-Host $DidNot }
+    if ($ActionRequired) {
+        Write-Host "USER_ACTION_REQUIRED"
+    } else {
+        Write-Host "No additional command is required right now."
+    }
 }
 
 function Test-LegacyVolume {
@@ -162,6 +252,13 @@ function Test-UnknownVolumeContent {
     return $kids.Count -gt 0
 }
 
+function Get-VolumeClass {
+    if (Test-LegacyVolume) { return "UNKNOWN_LEGACY_RESOURCE" }
+    if (Test-KnownCitizen) { return "KNOWN_MANAGED_CITIZEN" }
+    if (Test-UnknownVolumeContent) { return "UNKNOWN_LEGACY_RESOURCE" }
+    return "NO_CITIZEN"
+}
+
 function Test-PortOccupied {
     try {
         $client = New-Object System.Net.Sockets.TcpClient
@@ -181,6 +278,13 @@ function Test-PortOccupied {
     } catch {
         return $false
     }
+}
+
+function Get-PortClass {
+    $occupied = Test-PortOccupied
+    if (-not $occupied) { return "FREE" }
+    if (Test-KnownCitizen) { return "CURRENT_CITIZEN" }
+    return "UNKNOWN_PROCESS"
 }
 
 function ConvertFrom-ChecksumBytes([byte[]]$Bytes) {
@@ -273,12 +377,7 @@ function Get-OfficialHttpFile([string]$Uri, [string]$OutFile) {
 }
 
 function Show-RootfsVerifyFailed([string]$Reason) {
-    Write-HostState "failed"
-    Write-Host "Ubuntu rootfs verification could not be completed."
-    Write-Host "No WSL distro was imported and no Citizen was created."
-    if ($Reason) {
-        Write-Host $Reason
-    }
+    Write-Fail "VERIFICATION_FAILED" "Ubuntu verification could not be completed." ("Citizen did not import WSL.`nCitizen did not create a Citizen.`nCitizen did not modify your existing WSL distributions.`n" + $(if ($Reason) { $Reason } else { "Ubuntu rootfs verification could not be completed." }) + "`nNo WSL distro was imported and no Citizen was created.") $false
 }
 
 function Resolve-OfficialRootfs {
@@ -310,7 +409,7 @@ function Resolve-OfficialRootfs {
         $script:DiagShaContentLength = [string]$meta.ContentLength
         $script:DiagChecksumFound = $false
         $script:DiagExpected = ""
-        Write-HostState "distro_provisioning" $false
+        Write-HostState "PROVISIONING" $false
         $text = ConvertFrom-ChecksumBytes $meta.Body
         $bad = Test-ChecksumManifestBad $text $meta.ContentType
         if ($bad) {
@@ -324,65 +423,284 @@ function Resolve-OfficialRootfs {
         }
         $script:DiagChecksumFound = $true
         $script:DiagExpected = $expected
-        Write-HostState "distro_provisioning" $false
+        Write-HostState "PROVISIONING" $false
         return @{ Expected = $expected; RootfsUrl = $src.Rootfs; SumsUrl = $src.Sums }
     }
     Show-RootfsVerifyFailed $lastReason
     return $null
 }
 
-Save-BootstrapCopy
-Write-CitizenHost "Verifying Windows..."
-
-if (Test-LegacyVolume -or Test-UnknownVolumeContent) {
-    Write-HostState "failed"
-    Write-Host "UNKNOWN_LEGACY_INSTALLATION"
-    Write-Host "An unrecognized legacy Citizen-like install was found. It was not migrated or overwritten."
-    exit 3
+function Get-RequirementsManifest {
+    if (-not (Test-Path -LiteralPath $RequirementsPath)) {
+        Save-BootstrapCopy
+    }
+    $raw = Get-Content -Raw -LiteralPath $RequirementsPath
+    return ($raw | ConvertFrom-Json)
 }
 
-$wslMissing = -not (Get-Command wsl.exe -ErrorAction SilentlyContinue)
-if ($wslMissing -and -not (Test-IsElevated)) {
-    Request-Elevation
+function Test-WslPresent {
+    return [bool](Get-Command wsl.exe -ErrorAction SilentlyContinue)
 }
 
-if ($wslMissing) {
-    Write-HostState "wsl_enable_requested"
-    Write-CitizenHost "Provisioning WSL2..."
-    wsl.exe --install --no-distribution
-    Write-PendingReboot
-    exit 2
+function Test-WslOperational {
+    if (-not (Test-WslPresent)) { return $false }
+    wsl.exe --status 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
 }
 
-wsl.exe --status 2>$null | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    if (-not (Test-IsElevated)) { Request-Elevation }
-    Write-PendingReboot
-    exit 2
+function Get-ManagedDistroList {
+    if (-not (Test-WslPresent)) { return "" }
+    return ((wsl.exe -l -v | Out-String) + "")
 }
 
-Write-HostState "wsl_ready" $false
-
-if (Test-KnownCitizen) {
-    Write-CitizenHost "Existing Citizen detected. Resuming."
+function Show-AuthorizationScreen {
+    Write-CitizenHost "Windows needs permission to continue."
+    Write-Host ""
+    Write-Host "Citizen needs permission to prepare Windows."
+    Write-Host "The following system components may be enabled:"
+    Write-Host "  * WSL2"
+    Write-Host "  * Virtual Machine Platform"
+    Write-Host "  * required managed-environment infrastructure"
+    Write-Host ""
+    Write-Host "[ Continue ]"
+    try {
+        $null = Read-Host "Press Enter to continue"
+    } catch {
+        Write-Fail "USER_DECLINED" "Windows permission was not granted." "Citizen did not enable Windows features.`nCitizen did not create a Citizen." $false
+        exit 2
+    }
+    $script:AuthorizationGranted = $true
+    Write-HostState "AUTHORIZATION_REQUIRED"
+    Write-CitizenHost "Permission granted."
 }
 
-if ((Test-PortOccupied) -and -not (Test-KnownCitizen)) {
-    Write-HostState "failed" $false
-    Write-Host "Port 127.0.0.1:3434 is occupied by an unknown process."
-    Write-Host "The occupying process was not stopped."
-    Write-Host "No second Citizen was created."
-    exit 4
+function Set-RequirementStatus([string]$Id, [string]$Status) {
+    $script:RequirementsState[$Id] = $Status
 }
 
-$list = (wsl.exe -l -v | Out-String)
-if ($list -match [regex]::Escape($Distro) -and $list -match "$Distro\s+\S+\s+1(\s|$)") {
-    Write-CitizenHost "Provisioning WSL2..."
-    wsl.exe --set-version $Distro 2
+function Invoke-RequirementDetect($Item) {
+    $id = [string]$Item.id
+    switch ($id) {
+        "windows_version" {
+            $v = [Environment]::OSVersion.Version
+            if ($v.Major -gt 10 -or ($v.Major -eq 10 -and $v.Build -ge 19041)) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "windows_architecture" {
+            if ($env:PROCESSOR_ARCHITECTURE -in @("AMD64", "X64")) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "powershell" {
+            if ($PSVersionTable.PSVersion.Major -gt 5 -or ($PSVersionTable.PSVersion.Major -eq 5 -and $PSVersionTable.PSVersion.Minor -ge 1)) {
+                return "VERIFIED"
+            }
+            return "MISSING"
+        }
+        "administrator_elevation" {
+            if (Test-IsElevated) { return "VERIFIED" }
+            if (Test-WslOperational) { return "PRESENT" }
+            return "MISSING"
+        }
+        "virtualization" {
+            try {
+                $cs = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+                if ($cs.VirtualizationFirmwareEnabled -eq $true) { return "VERIFIED" }
+            } catch { }
+            try {
+                $h = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+                if ($h.HypervisorPresent) { return "VERIFIED" }
+            } catch { }
+            if (Test-WslOperational) { return "VERIFIED" }
+            return "UNKNOWN"
+        }
+        "wsl_feature" {
+            if (Test-WslOperational -or Test-WslPresent) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "virtual_machine_platform" {
+            if (Test-WslOperational) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "wsl_runtime" {
+            if (Test-WslOperational) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "wsl_version" {
+            if (-not (Test-WslOperational)) { return "MISSING" }
+            $st = (wsl.exe --status 2>$null | Out-String)
+            if ($st -match "Default Version:\s*2") { return "VERIFIED" }
+            $list = Get-ManagedDistroList
+            if ($list -match [regex]::Escape($Distro) -and $list -match "$Distro\s+\S+\s+2(\s|$)") { return "VERIFIED" }
+            return "MISSING"
+        }
+        "managed_distribution" {
+            $list = Get-ManagedDistroList
+            if ($list -match [regex]::Escape($Distro)) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "managed_distribution_version" {
+            $list = Get-ManagedDistroList
+            if ($list -match [regex]::Escape($Distro) -and $list -match "$Distro\s+\S+\s+2(\s|$)") { return "VERIFIED" }
+            if ($list -match [regex]::Escape($Distro)) { return "MISSING" }
+            return "MISSING"
+        }
+        "linux_user" {
+            if (-not (Test-WslOperational)) { return "MISSING" }
+            $list = Get-ManagedDistroList
+            if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
+            wsl.exe -d $Distro --exec /usr/bin/id -u citizen 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "linux_network" {
+            if (-not (Test-WslOperational)) { return "MISSING" }
+            $list = Get-ManagedDistroList
+            if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
+            return "PRESENT"
+        }
+        "linux_dns" {
+            if (-not (Test-WslOperational)) { return "MISSING" }
+            $list = Get-ManagedDistroList
+            if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
+            return "PRESENT"
+        }
+        "linux_https" {
+            if (-not (Test-WslOperational)) { return "MISSING" }
+            $list = Get-ManagedDistroList
+            if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
+            return "PRESENT"
+        }
+        "container_engine" {
+            if (-not (Test-WslOperational)) { return "MISSING" }
+            $list = Get-ManagedDistroList
+            if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
+            wsl.exe -d $Distro --exec /bin/bash -lc "command -v podman >/dev/null" 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "rootless_prerequisites" {
+            if (-not (Test-WslOperational)) { return "MISSING" }
+            $list = Get-ManagedDistroList
+            if ($list -notmatch [regex]::Escape($Distro)) { return "MISSING" }
+            wsl.exe -d $Distro --exec /bin/bash -lc "grep -q '^citizen:' /etc/subuid" 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "public_ghcr_access" {
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri "https://ghcr.io/v2/" -TimeoutSec 20 | Out-Null
+                return "VERIFIED"
+            } catch {
+                return "MISSING"
+            }
+        }
+        "public_ubuntu_access" {
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri "https://cloud-images.ubuntu.com/wsl/releases/24.04/current/SHA256SUMS" -TimeoutSec 20 | Out-Null
+                return "VERIFIED"
+            } catch {
+                return "MISSING"
+            }
+        }
+        "disk_space" {
+            $root = [string]$env:LOCALAPPDATA.Substring(0, 1)
+            $drive = Get-PSDrive -Name $root -ErrorAction SilentlyContinue
+            if ($drive -and $drive.Free -ge 10737418240) { return "VERIFIED" }
+            return "MISSING"
+        }
+        "memory" {
+            try {
+                $m = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+                if ($m -ge 4294967296) { return "VERIFIED" }
+            } catch { }
+            return "UNKNOWN"
+        }
+        "port_3434" {
+            $cls = Get-PortClass
+            if ($cls -eq "UNKNOWN_PROCESS") { return "BLOCKED" }
+            return "VERIFIED"
+        }
+        "persistent_storage" {
+            $cls = Get-VolumeClass
+            if ($cls -eq "UNKNOWN_LEGACY_RESOURCE") { return "BLOCKED" }
+            return "VERIFIED"
+        }
+        "scheduled_resume" {
+            if (Test-WslOperational) { return "PRESENT" }
+            return "MISSING"
+        }
+        default { return "UNKNOWN" }
+    }
 }
 
-if ($list -notmatch [regex]::Escape($Distro)) {
-    Write-HostState "distro_provisioning" $false
+function Show-Inventory($Manifest) {
+    Write-CitizenHost "Checking your Windows environment..."
+    $labels = [ordered]@{}
+    foreach ($item in $Manifest.requirements) {
+        $status = Invoke-RequirementDetect $item
+        Set-RequirementStatus $item.id $status
+        $label = [string]$item.user_label
+        if (-not $label) { $label = [string]$item.name }
+        $show = "OK"
+        if ($status -in @("MISSING", "BLOCKED", "UNKNOWN")) { $show = "MISSING" }
+        if (-not $labels.Contains($label) -or $labels[$label] -ne "MISSING") {
+            $labels[$label] = $show
+        }
+    }
+    foreach ($key in $labels.Keys) {
+        $pad = "." * [Math]::Max(2, 40 - $key.Length)
+        Write-Host ("{0}{1} {2}" -f $key, $pad, $labels[$key])
+    }
+}
+
+function Test-RequirementNeedsAdmin($Manifest) {
+    foreach ($item in $Manifest.requirements) {
+        $st = $script:RequirementsState[$item.id]
+        if ($item.requires_admin -and $st -eq "MISSING") { return $true }
+    }
+    return $false
+}
+
+function Invoke-Provisioner([string]$Name) {
+    switch ($Name) {
+        "none" { return }
+        "self_elevate" { return }
+        "register_resume" {
+            Register-ResumeAfterReboot
+        }
+        "wsl_install" {
+            Write-CitizenHost "Preparing WSL2..."
+            Write-HostState "PROVISIONING" $false
+            wsl.exe --install --no-distribution
+            Write-PendingReboot
+            exit 2
+        }
+        "set_wsl_default_v2" {
+            Write-CitizenHost "Preparing WSL2..."
+            wsl.exe --set-default-version 2 2>$null | Out-Null
+        }
+        "upgrade_managed_distro_v2" {
+            Write-CitizenHost "Preparing WSL2..."
+            wsl.exe --set-version $Distro 2
+        }
+        "ensure_volume" {
+            New-Item -ItemType Directory -Force -Path $VolumeWin | Out-Null
+        }
+        "import_managed_distro" {
+            Import-ManagedDistro
+        }
+        "guest_prepare" {
+            return
+        }
+        default { return }
+    }
+}
+
+function Import-ManagedDistro {
+    $list = Get-ManagedDistroList
+    if ($list -match [regex]::Escape($Distro)) { return }
+    Write-CitizenHost "Preparing managed Citizen environment..."
+    Write-HostState "PROVISIONING" $false
     $dest = Join-Path $StateDir "distro"
     $rootfs = Join-Path $StateDir $RootfsName
     Write-CitizenHost "Verifying Ubuntu rootfs metadata..."
@@ -392,49 +710,119 @@ if ($list -notmatch [regex]::Escape($Distro)) {
     Invoke-WebRequest -UseBasicParsing -Uri $resolved.RootfsUrl -OutFile $rootfs
     $actual = (Get-FileHash -Algorithm SHA256 -Path $rootfs).Hash.ToLower()
     $script:DiagActual = $actual
-    Write-HostState "distro_provisioning" $false
+    Write-HostState "PROVISIONING" $false
     if ($actual -ne $resolved.Expected) {
         Remove-Item -Force $rootfs
-        Write-HostState "failed"
-        Write-Host "Rootfs SHA256 mismatch vs official SHA256SUMS. File discarded. Not imported."
-        Write-Host "No WSL distro was imported and no Citizen was created."
+        Write-Fail "VERIFICATION_FAILED" "Ubuntu verification could not be completed." "Citizen did not import WSL.`nCitizen did not create a Citizen.`nCitizen did not modify your existing WSL distributions.`nRootfs SHA256 mismatch vs official SHA256SUMS. File discarded. Not imported.`nNo WSL distro was imported and no Citizen was created." $false
         exit 1
     }
     $bytes = [System.IO.File]::ReadAllBytes($rootfs)
     if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x1F -or $bytes[1] -ne 0x8B) {
         Remove-Item -Force $rootfs
-        Write-HostState "failed"
-        Write-Host "Rootfs is not gzip tar as required by wsl --import. Not imported."
-        Write-Host "No WSL distro was imported and no Citizen was created."
+        Write-Fail "VERIFICATION_FAILED" "Ubuntu verification could not be completed." "Citizen did not import WSL.`nCitizen did not create a Citizen.`nCitizen did not modify your existing WSL distributions.`nRootfs is not gzip tar as required by wsl --import. Not imported.`nNo WSL distro was imported and no Citizen was created." $false
         exit 1
     }
     Write-CitizenHost "SHA256 verified..."
-    Write-CitizenHost "Provisioning WSL2..."
     wsl.exe --import $Distro $dest $rootfs --version 2
+}
+
+Save-BootstrapCopy
+$prior = Read-HostState
+if ($prior) {
+    if ($prior.authorization_granted) { $script:AuthorizationGranted = $true }
+    if ($prior.plan_id) { $script:PlanId = [string]$prior.plan_id }
+    if ($prior.resume_marker -eq $true) { $script:ResumeMarker = $true }
+    if ($prior.bootstrap_phase -eq "REBOOT_REQUIRED" -or $prior.phase -eq "wsl_pending_reboot") {
+        Write-HostState "RESUMING" $false
+        Write-CitizenHost "Checking your Windows environment..."
+    }
+}
+Write-HostState "BOOTSTRAP_STARTED"
+Write-HostState "PREFLIGHT"
+
+$volumeClass = Get-VolumeClass
+if ($volumeClass -eq "UNKNOWN_LEGACY_RESOURCE") {
+    Write-Fail "UNKNOWN_LEGACY" "UNKNOWN_LEGACY_INSTALLATION" "An unrecognized legacy Citizen-like install was found. It was not migrated or overwritten.`nCitizen did not create a Citizen.`nCitizen did not modify your existing WSL distributions." $true
+    exit 3
+}
+
+$portClass = Get-PortClass
+if ($portClass -eq "UNKNOWN_PROCESS") {
+    Write-Fail "PORT_CONFLICT" "Port 127.0.0.1:3434 is occupied by an unknown process." "The occupying process was not stopped.`nNo second Citizen was created." $true
+    exit 4
+}
+
+$manifest = Get-RequirementsManifest
+Write-HostState "REQUIREMENTS_INVENTORY"
+Show-Inventory $manifest
+Write-HostState "PLAN"
+
+$needsAdmin = Test-RequirementNeedsAdmin $manifest
+if ($needsAdmin -and -not (Test-IsElevated)) {
+    Write-HostState "AUTHORIZATION_REQUIRED"
+    if (-not $script:AuthorizationGranted) {
+        Show-AuthorizationScreen
+    }
+    Request-Elevation
+}
+
+if (-not (Test-WslOperational)) {
+    Write-CitizenHost "Preparing required components..."
+    Invoke-Provisioner "wsl_install"
+}
+
+wsl.exe --status 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    if (-not (Test-IsElevated)) {
+        Write-HostState "AUTHORIZATION_REQUIRED"
+        if (-not $script:AuthorizationGranted) { Show-AuthorizationScreen }
+        Request-Elevation
+    }
+    Write-PendingReboot
+    exit 2
+}
+
+Write-HostState "VERIFYING" $false
+Invoke-Provisioner "set_wsl_default_v2"
+
+if (Test-KnownCitizen) {
+    Write-CitizenHost "Starting Citizen..."
+}
+
+$list = Get-ManagedDistroList
+if ($list -match [regex]::Escape($Distro) -and $list -match "$Distro\s+\S+\s+1(\s|$)") {
+    Invoke-Provisioner "upgrade_managed_distro_v2"
+}
+
+if ($list -notmatch [regex]::Escape($Distro)) {
+    Invoke-Provisioner "import_managed_distro"
 }
 
 $probe = (wsl.exe -d $Distro --exec /bin/true 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) {
-    Write-HostState "failed" $false
-    Write-Host "Managed distro $Distro cannot execute commands. No Citizen was born."
+    Write-Fail "PROVISION_FAILED" "The managed Citizen environment could not run." "Citizen did not create a Citizen.`nManaged distro $Distro cannot execute commands. No Citizen was born." $false
     exit 1
 }
 
-Write-HostState "runtime_provisioning" $true
+Write-HostState "ENVIRONMENT_READY" $true
 $volWsl = ConvertTo-WslPath $VolumeWin
-Write-CitizenHost "Provisioning Citizen environment..."
+Write-CitizenHost "Preparing managed Citizen environment..."
+Write-CitizenHost "Verifying public Citizen image..."
 if (-not (Test-KnownCitizen)) {
-    Write-HostState "citizen_birth" $true
+    Write-HostState "ENVIRONMENT_READY" $true
 }
+Write-CitizenHost "Starting Citizen..."
 $envLine = "CITIZEN_HOME='$volWsl' CITIZEN_DATA_DIR='$volWsl' CITIZEN_LINUX_INSTALL_URL='$LinuxInstallUrl' CITIZEN_IMAGE='$ImageName@$ImageDigest' CITIZEN_OPEN_BROWSER=0"
 Get-Content -Raw -LiteralPath $GuestPath | wsl.exe -d $Distro --exec /bin/bash -lc "export $envLine; /bin/bash -s"
 $code = $LASTEXITCODE
 if ($code -eq 0) {
-    Write-HostState "ready" $true
+    Write-HostState "CITIZEN_READY" $true
+    Write-HostState "COMPLETE" $true
     Unregister-ResumeAfterReboot
     Write-CitizenHost "Citizen READY."
+    Write-Host "http://127.0.0.1:3434/"
     Start-Process "http://127.0.0.1:3434/"
 } else {
-    Write-HostState "failed" $true
+    Write-Fail "PROVISION_FAILED" "Citizen could not be started." "Citizen did not complete Birth or Resume.`nNo additional command is required right now." $false
 }
 exit $code

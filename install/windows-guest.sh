@@ -19,6 +19,16 @@ if [ "$(uname -s)" != "Linux" ]; then
   fail "Guest bootstrap runs only inside the managed Linux environment."
 fi
 
+verify_public_image() {
+  command -v podman >/dev/null 2>&1 || fail "The managed environment runtime could not be prepared. No Citizen was created."
+  podman pull "$CITIZEN_IMAGE" >/dev/null
+  got="$(podman image inspect --format '{{.Digest}}' "$CITIZEN_IMAGE" 2>/dev/null || true)"
+  expected="$IMAGE_DIGEST"
+  if [ -z "$got" ] || [ "$got" != "$expected" ]; then
+    fail "The public Citizen image digest did not match. Local images were not used. No Citizen was created."
+  fi
+}
+
 run_public_linux_install() {
   command -v curl >/dev/null 2>&1 || fail "curl is required inside the managed distro."
   mkdir -p "$VOLUME" "$DATA_DIR"
@@ -26,6 +36,7 @@ run_public_linux_install() {
     echo "UNKNOWN_LEGACY_INSTALLATION: volume was not migrated or overwritten." >&2
     exit 3
   fi
+  verify_public_image
   curl -fsSL "$LINUX_INSTALL_URL" | bash
 }
 
@@ -45,7 +56,7 @@ if [ "$(id -u)" -eq 0 ]; then
     printf '\n# CONRRAD-managed=CONRRAD-Citizen\n[user]\ndefault=citizen\n' >> /etc/wsl.conf
   chown -R citizen:citizen "$VOLUME" 2>/dev/null || true
   exec su -s /bin/bash citizen -c \
-    "CITIZEN_HOME='$VOLUME' CITIZEN_DATA_DIR='$DATA_DIR' CITIZEN_IMAGE='$CITIZEN_IMAGE' CITIZEN_OPEN_BROWSER=0 CITIZEN_LINUX_INSTALL_URL='$LINUX_INSTALL_URL' bash -lc 'curl -fsSL \"\$CITIZEN_LINUX_INSTALL_URL\" | bash'"
+    "export CITIZEN_HOME='$VOLUME' CITIZEN_DATA_DIR='$DATA_DIR' CITIZEN_IMAGE='$CITIZEN_IMAGE' CITIZEN_OPEN_BROWSER=0 CITIZEN_LINUX_INSTALL_URL='$LINUX_INSTALL_URL' VOLUME='$VOLUME' DATA_DIR='$DATA_DIR' LINUX_INSTALL_URL='$LINUX_INSTALL_URL' IMAGE_DIGEST='$IMAGE_DIGEST'; $(declare -f fail verify_public_image run_public_linux_install); run_public_linux_install"
 fi
 
 run_public_linux_install
