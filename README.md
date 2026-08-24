@@ -7,6 +7,8 @@ keeps History, and can later Sync without becoming someone else.
 
 ### Linux
 
+STATUS=REFERENCE CERTIFIED
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-managed-0.4.2.1/install.sh | bash
 ```
@@ -26,16 +28,30 @@ Then open http://127.0.0.1:3434/
 
 ### Windows
 
-Not yet public. The Windows WSL2 host path exists in the private runtime
-source. It is **not** a public one-command in this repository.
+STATUS=IMPLEMENTED / REAL VALIDATION PENDING
 
-`WINDOWS_STATUS=IMPLEMENTED_NOT_PUBLIC`
+One Citizen. Windows is host infrastructure. WSL2 is host infrastructure.
+The managed Linux environment is the runtime boundary.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.1/install/windows.ps1 | iex"
+```
+
+Trust reference: immutable tag `citizen-windows-wsl2-0.4.2.1` — not `main`.
+That one instruction detects Windows, self-elevates for UAC, resumes after
+reboot, provisions WSL2 and the managed distro `CONRRAD-Citizen`, pulls the
+same public image as Linux, and reaches READY. No second paste. No pip.
+No native Windows Citizen.
+
+Windows is **not certified**. Real Windows E2E is P0.9H.2.
+
+`WINDOWS_STATUS=IMPLEMENTED_REAL_VALIDATION_PENDING`
 
 ### macOS
 
 Not yet public. There is no public macOS host/VM installer here.
 
-`MACOS_STATUS=IMPLEMENTED_NOT_PUBLIC`
+`MACOS_STATUS=NOT_PUBLIC`
 
 ## Versions
 

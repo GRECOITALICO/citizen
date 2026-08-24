@@ -18,6 +18,8 @@ Do **not** use `main` as the install URL. Use tag `citizen-managed-0.4.2.1`.
 
 ## Linux
 
+STATUS=REFERENCE CERTIFIED
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-managed-0.4.2.1/install.sh | bash
 ```
@@ -42,17 +44,35 @@ Then open http://127.0.0.1:3434/
 
 ## Windows
 
-Not yet public. No public one-command is documented here.
+STATUS=IMPLEMENTED / REAL VALIDATION PENDING
 
-`WINDOWS_STATUS=IMPLEMENTED_NOT_PUBLIC`
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.1/install/windows.ps1 | iex"
+```
 
-Windows E2E is not claimed.
+Trust reference: tag `citizen-windows-wsl2-0.4.2.1` — not `main`.
+
+This is the same Citizen as Linux. It:
+
+1. detects Windows and prepares WSL2
+2. self-elevates (UAC) without asking the user to open an Administrator shell
+3. resumes automatically after reboot
+4. imports official Ubuntu WSL rootfs into managed distro `CONRRAD-Citizen`
+5. pulls `ghcr.io/grecoitalico/citizen@sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da`
+6. creates persistent volume `%LOCALAPPDATA%\CONRRAD\Citizen`
+7. Birth (empty volume) or Resume (existing sealed identity)
+8. reaches READY without Sync
+
+Do not use CitizenSetup.py, NSSM, native Windows Python, or `1.4.0-alpha`.
+Windows is **not certified** until P0.9H.2 runs on a real Windows machine.
+
+`WINDOWS_STATUS=IMPLEMENTED_REAL_VALIDATION_PENDING`
 
 ## macOS
 
 Not yet public. No public one-command is documented here.
 
-`MACOS_STATUS=IMPLEMENTED_NOT_PUBLIC`
+`MACOS_STATUS=NOT_PUBLIC`
 
 ## Canonical public artifact
 

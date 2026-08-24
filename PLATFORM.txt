@@ -1,4 +1,15 @@
-Citizen Seed 0.1 — portable Python seed.
-Linux: ./install.sh
-macOS: ./install.sh
-Windows: install via PowerShell scripts/install_service_windows.ps1 after unpack.
+CONRRAD Citizen — one product. Hosts differ. Runtime does not.
+
+LINUX
+ONE COMMAND
+STATUS=REFERENCE CERTIFIED
+curl -fsSL https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-managed-0.4.2.1/install.sh | bash
+
+WINDOWS
+ONE POWERSHELL COMMAND
+STATUS=IMPLEMENTED / REAL VALIDATION PENDING
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.1/install/windows.ps1 | iex"
+
+MACOS
+STATUS=NOT_PUBLIC
+No public macOS installer.
