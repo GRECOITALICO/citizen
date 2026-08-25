@@ -5,7 +5,7 @@ set -euo pipefail
 
 LINUX_INSTALL_URL="${CITIZEN_LINUX_INSTALL_URL:-https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-managed-0.4.2.1/install.sh}"
 IMAGE_NAME="${CITIZEN_IMAGE_NAME:-ghcr.io/grecoitalico/citizen}"
-IMAGE_DIGEST="${CITIZEN_IMAGE_DIGEST:-sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da}"
+IMAGE_DIGEST="${CITIZEN_IMAGE_DIGEST:-sha256:446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e}"
 VOLUME="${CITIZEN_HOME:?CITIZEN_HOME must be the persistent Citizen volume}"
 DATA_DIR="${CITIZEN_DATA_DIR:-$(dirname "$VOLUME")}"
 export CITIZEN_OPEN_BROWSER="${CITIZEN_OPEN_BROWSER:-0}"
@@ -36,6 +36,14 @@ run_public_linux_install() {
     echo "UNKNOWN_LEGACY_INSTALLATION: volume was not migrated or overwritten." >&2
     exit 3
   fi
+  if [ -f "$VOLUME/identity/SEALED" ] && [ -f "$VOLUME/identity/identity.json" ]; then
+    echo "[Citizen Host] Existing Citizen detected."
+    echo "[Citizen Host] Preserving Citizen volume."
+    if command -v podman >/dev/null 2>&1; then
+      podman start conrrad-citizen >/dev/null 2>&1 || true
+    fi
+    exit 0
+  fi
   verify_public_image
   curl -fsSL "$LINUX_INSTALL_URL" | bash
 }
@@ -49,8 +57,8 @@ if [ "$(id -u)" -eq 0 ]; then
   mkdir -p "$VOLUME" "$DATA_DIR"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y --no-install-recommends \
-    podman uidmap slirp4netns passt fuse-overlayfs crun curl ca-certificates python3
+    apt-get install -y --no-install-recommends \
+    podman uidmap slirp4netns passt fuse-overlayfs crun curl ca-certificates python3 python3-cryptography
   printf 'CONRRAD-Citizen\n' > /etc/conrrad-citizen-managed
   grep -q 'CONRRAD-managed' /etc/wsl.conf 2>/dev/null || \
     printf '\n# CONRRAD-managed=CONRRAD-Citizen\n[user]\ndefault=citizen\n' >> /etc/wsl.conf

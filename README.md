@@ -34,16 +34,17 @@ One Citizen. Windows is host infrastructure. WSL2 is host infrastructure.
 The managed Linux environment is the runtime boundary.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.7/install/windows.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.8/install/windows.ps1 | iex"
 ```
 
-Trust reference: immutable tag `citizen-windows-wsl2-0.4.2.7` — not `main`.
+Trust reference: immutable tag `citizen-windows-wsl2-0.4.2.8` — not `main`.
 That one instruction detects Windows, self-elevates for UAC, resumes after
-reboot, provisions WSL2 and the managed distro `CONRRAD-Citizen`, pulls the
-same public image as Linux, and reaches READY. No second paste. No pip.
-No native Windows Citizen.
+reboot, and either creates or **recovers** the managed distro `CONRRAD-Citizen`.
+It installs the host-owned Runtime Evolution Seed outside Citizen Life,
+preserves the existing Citizen volume, and does not Birth a second Citizen.
+No second paste. No native Windows pip. No native Windows Citizen.
 
-Windows is **not certified**. Real Windows E2E is P0.9H.2.
+Windows is **not certified**. Real Windows E2E remains pending on the existing machine.
 
 `WINDOWS_STATUS=IMPLEMENTED_REAL_VALIDATION_PENDING`
 

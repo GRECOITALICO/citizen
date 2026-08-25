@@ -47,24 +47,27 @@ Then open http://127.0.0.1:3434/
 STATUS=IMPLEMENTED / REAL VALIDATION PENDING
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.7/install/windows.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.8/install/windows.ps1 | iex"
 ```
 
-Trust reference: tag `citizen-windows-wsl2-0.4.2.7` — not `main`.
+Trust reference: tag `citizen-windows-wsl2-0.4.2.8` — not `main`.
 
-This is the same Citizen as Linux. It:
+This is the same Citizen as Linux. The same command handles fresh install
+and existing-Citizen recovery. It:
 
 1. detects Windows and prepares WSL2
 2. self-elevates (UAC) without asking the user to open an Administrator shell
 3. resumes automatically after reboot
-4. imports official Ubuntu WSL rootfs into managed distro `CONRRAD-Citizen`
-5. pulls `ghcr.io/grecoitalico/citizen@sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da`
-6. creates persistent volume `%LOCALAPPDATA%\CONRRAD\Citizen`
-7. Birth (empty volume) or Resume (existing sealed identity)
-8. reaches READY without Sync
+4. recovers `CONRRAD-Citizen` if it already exists (does not unregister or delete)
+5. installs the host-owned Runtime Evolution Seed in `%LOCALAPPDATA%\CONRRAD\CitizenHost`
+6. preserves `%LOCALAPPDATA%\CONRRAD\Citizen` (identity, History, Evidence)
+7. for a fresh volume: pulls `ghcr.io/grecoitalico/citizen@sha256:446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e`
+8. for an existing Citizen: runtime-only bridge from `64df202d…` to `446da11d…` (runtime version remains 0.4.2)
+9. Birth only on an empty volume; Resume/recovery never creates a second Citizen
+10. reaches READY without living Sync
 
 Do not use CitizenSetup.py, NSSM, native Windows Python, or `1.4.0-alpha`.
-Windows is **not certified** until P0.9H.2 runs on a real Windows machine.
+Windows is **not certified** until P0.11I.3C evidence is captured on the real machine.
 
 `WINDOWS_STATUS=IMPLEMENTED_REAL_VALIDATION_PENDING`
 

@@ -1,0 +1,46 @@
+{
+  "kind": "conrrad-class-package",
+  "descriptor": {
+    "package_id": "citizen-runtime-bridge-0.4.2.8",
+    "schema_version": "conrrad-class-package/v1",
+    "source": {
+      "living_version": "0.4.3",
+      "runtime_version": "0.4.2",
+      "runtime_image_digest": "sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da"
+    },
+    "target": {
+      "living_version": "0.4.3",
+      "runtime_version": "0.4.2",
+      "runtime_image_digest": "sha256:446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e"
+    },
+    "artifacts": {
+      "runtime_image": "ghcr.io/grecoitalico/citizen@sha256:446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e",
+      "living_pack": ""
+    },
+    "integrity": {
+      "runtime_sha256": "446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e",
+      "living_sha256": ""
+    },
+    "compatibility": {
+      "minimum_supported_runtime": "0.4.2",
+      "minimum_supported_living": "0.4.0",
+      "platform": "linux",
+      "architecture": "amd64"
+    },
+    "migration": {
+      "runtime": "none",
+      "living": "none"
+    },
+    "rollback": {
+      "previous_runtime_image": "ghcr.io/grecoitalico/citizen@sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da",
+      "previous_living_version": "0.4.3"
+    },
+    "metadata": {
+      "created_at": "2026-08-24T00:00:00Z",
+      "release_id": "0.4.2.8",
+      "provenance": "P0.11I.3C"
+    }
+  },
+  "signature": "VhOB4Prh3jH4Pwv7om/zmGKxdwQ6ckTLNwnnjSIYRHc+CHjjrsNgRrsBDc42DKDRZOOMoQY16caDtuon0vZeAQ==",
+  "signing_key_id": "mission-033-governed-key"
+}

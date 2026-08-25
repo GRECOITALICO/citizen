@@ -1,23 +1,29 @@
 # CONRRAD Citizen — public Windows host bootstrap (WSL2).
-# One instruction. Self-elevates. Resumes after reboot. Never Sync.
+# One instruction. Self-elevates. Resumes after reboot. Recovers the existing Citizen.
+# Installs the host-owned Runtime Evolution Seed. Never Sync. Never Births twice.
 #
-# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.7/install/windows.ps1 | iex"
+# powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.8/install/windows.ps1 | iex"
 #
 # Windows is Host infrastructure. WSL2 is Host infrastructure.
 # The managed Linux environment is the runtime boundary.
 # Citizen is the same product certified on Linux.
 param()
 $ErrorActionPreference = "Stop"
-$PublicTag = "citizen-windows-wsl2-0.4.2.7"
+$PublicTag = "citizen-windows-wsl2-0.4.2.8"
 $LinuxInstallTag = "citizen-managed-0.4.2.1"
-$InstallerVersion = "0.4.2.7"
+$InstallerVersion = "0.4.2.8"
+$HostSeedVersion = "0.4.2.8"
 $PublicOrigin = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$PublicTag"
 $BootstrapUrl = "$PublicOrigin/install/windows.ps1"
 $GuestUrl = "$PublicOrigin/install/windows-guest.sh"
 $RequirementsUrl = "$PublicOrigin/install/windows/requirements.json"
+$HostSeedUrl = "$PublicOrigin/install/windows/host-seed/run.py"
+$HostSeedWheelUrl = "$PublicOrigin/install/windows/host-seed/conrrad_citizen-0.4.2.2-py3-none-any.whl"
+$ClassPackageUrl = "$PublicOrigin/install/windows/CLASS_PACKAGE.json"
 $LinuxInstallUrl = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$LinuxInstallTag/install.sh"
 $ImageName = "ghcr.io/grecoitalico/citizen"
-$ImageDigest = "sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da"
+$ImageDigest = "sha256:446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e"
+$SourceImageDigest = "sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da"
 $Distro = "CONRRAD-Citizen"
 $RootfsName = "ubuntu-noble-wsl-amd64-24.04lts.rootfs.tar.gz"
 $StateDir = Join-Path $env:LOCALAPPDATA "CONRRAD\CitizenHost"
@@ -26,6 +32,10 @@ $StateFile = Join-Path $StateDir "bootstrap.json"
 $SelfPath = Join-Path $StateDir "install\windows.ps1"
 $GuestPath = Join-Path $StateDir "install\windows-guest.sh"
 $RequirementsPath = Join-Path $StateDir "install\requirements.json"
+$HostSeedDir = Join-Path $StateDir "host-seed"
+$HostSeedRun = Join-Path $HostSeedDir "run.py"
+$HostSeedWheel = Join-Path $HostSeedDir "conrrad_citizen-0.4.2.2-py3-none-any.whl"
+$ClassPackagePath = Join-Path $HostSeedDir "CLASS_PACKAGE.json"
 $TaskName = "CONRRAD Citizen Host Resume"
 $script:BootstrapPhase = "BOOTSTRAP_STARTED"
 $script:PlanId = ""
@@ -105,7 +115,9 @@ function Get-LegacyPhaseAlias([string]$Phase) {
         "VERIFYING_CONTAINER_ENGINE" { return "runtime_provisioning" }
         "VERIFYING_PUBLIC_IMAGE" { return "runtime_provisioning" }
         "CREATING_ENVIRONMENT" { return "runtime_provisioning" }
+        "HOST_SEED" { return "runtime_provisioning" }
         "BIRTH_OR_RESUME" { return "runtime_provisioning" }
+        "RUNTIME_EVOLUTION" { return "runtime_provisioning" }
         "VERIFYING_CITIZEN" { return "runtime_provisioning" }
         "POST_START_HOUSEKEEPING" { return "ready" }
         "READY" { return "ready" }
@@ -184,6 +196,9 @@ function Write-HostState {
         LIVING_VERSION = $script:LivingVersion
         PORT = $script:UiPort
         HTTP_STATUS = $script:HttpStatus
+        HOST_SEED_VERSION = $HostSeedVersion
+        HOST_SEED_INSTALLED = [bool](Test-Path -LiteralPath (Join-Path $HostSeedDir "VERSION"))
+        SOURCE_IMAGE = "$ImageName@$SourceImageDigest"
         CLEANUP_WARNINGS = @($script:CleanupWarnings)
         CLEANUP_CLASS = $script:CleanupClass
     }
@@ -253,6 +268,63 @@ function Save-BootstrapCopy {
         } catch {
             if (-not (Test-Path -LiteralPath $RequirementsPath)) {
                 throw "Could not persist the Windows requirements manifest from $RequirementsUrl"
+            }
+        }
+    }
+    $copiedSeed = $false
+    if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
+        $here = Split-Path -Parent $PSCommandPath
+        foreach ($rel in @("host-seed\run.py", "windows\host-seed\run.py")) {
+            $sib = Join-Path $here $rel
+            if (Test-Path -LiteralPath $sib) {
+                New-Item -ItemType Directory -Force -Path $HostSeedDir | Out-Null
+                Copy-Item -LiteralPath $sib -Destination $HostSeedRun -Force
+                $copiedSeed = $true
+                break
+            }
+        }
+        foreach ($rel in @("CLASS_PACKAGE.json", "windows\CLASS_PACKAGE.json", "host-seed\CLASS_PACKAGE.json")) {
+            $sib = Join-Path $here $rel
+            if (Test-Path -LiteralPath $sib) {
+                New-Item -ItemType Directory -Force -Path $HostSeedDir | Out-Null
+                Copy-Item -LiteralPath $sib -Destination $ClassPackagePath -Force
+                break
+            }
+        }
+    }
+    if (-not $copiedSeed) {
+        try {
+            New-Item -ItemType Directory -Force -Path $HostSeedDir | Out-Null
+            Invoke-WebRequest -UseBasicParsing -Uri $HostSeedUrl -OutFile $HostSeedRun
+        } catch {
+        }
+    }
+    if (-not (Test-Path -LiteralPath $ClassPackagePath)) {
+        try {
+            New-Item -ItemType Directory -Force -Path $HostSeedDir | Out-Null
+            Invoke-WebRequest -UseBasicParsing -Uri $ClassPackageUrl -OutFile $ClassPackagePath
+        } catch {
+        }
+    }
+    if (-not (Test-Path -LiteralPath $HostSeedWheel)) {
+        $copiedWheel = $false
+        if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
+            $here = Split-Path -Parent $PSCommandPath
+            foreach ($rel in @("host-seed\conrrad_citizen-0.4.2.2-py3-none-any.whl", "windows\host-seed\conrrad_citizen-0.4.2.2-py3-none-any.whl")) {
+                $sib = Join-Path $here $rel
+                if (Test-Path -LiteralPath $sib) {
+                    New-Item -ItemType Directory -Force -Path $HostSeedDir | Out-Null
+                    Copy-Item -LiteralPath $sib -Destination $HostSeedWheel -Force
+                    $copiedWheel = $true
+                    break
+                }
+            }
+        }
+        if (-not $copiedWheel) {
+            try {
+                New-Item -ItemType Directory -Force -Path $HostSeedDir | Out-Null
+                Invoke-WebRequest -UseBasicParsing -Uri $HostSeedWheelUrl -OutFile $HostSeedWheel
+            } catch {
             }
         }
     }
@@ -785,6 +857,70 @@ function Complete-BootstrapSuccess {
     Write-Host "http://127.0.0.1:$($script:UiPort)/"
     try { Start-Process "http://127.0.0.1:$($script:UiPort)/" } catch { }
     exit 0
+}
+
+function Install-HostSeed {
+    Write-HostState "HOST_SEED" $true
+    Write-CitizenHost "Updating host runtime seed."
+    New-Item -ItemType Directory -Force -Path $HostSeedDir | Out-Null
+    Set-Content -Encoding ascii -Path (Join-Path $HostSeedDir "VERSION") -Value $HostSeedVersion
+    Save-BootstrapCopy
+    $receipt = Join-Path $StateDir "HOST_SEED_RECEIPTS.jsonl"
+    $row = '{"kind":"HOST_SEED_STARTED","owner":"HOST_ADAPTER","version":"' + $HostSeedVersion + '"}'
+    Add-Content -Encoding utf8 -Path $receipt -Value $row
+}
+
+function Invoke-StartExistingEnvironment {
+    $cmd = "if command -v podman >/dev/null 2>&1; then podman start conrrad-citizen >/dev/null 2>&1 || true; printf STARTED; else printf NO_ENGINE; fi"
+    $r = Invoke-WslExec @("-d", $Distro, "-u", "citizen", "--exec", "/bin/bash", "-lc", $cmd)
+    return [bool]($r.Stdout -match "STARTED")
+}
+
+function Invoke-HostSeedEvolution {
+    Write-HostState "RUNTIME_EVOLUTION" $true
+    Write-CitizenHost "Ready for runtime evolution."
+    $volWsl = ConvertTo-WslPath $VolumeWin
+    $hostWsl = ConvertTo-WslPath $StateDir
+    $pkgWsl = ConvertTo-WslPath $ClassPackagePath
+    if (-not (Test-Path -LiteralPath $ClassPackagePath)) {
+        return $true
+    }
+    $wheelWsl = "$hostWsl/host-seed/conrrad_citizen-0.4.2.2-py3-none-any.whl"
+    $libWsl = "$hostWsl/host-seed/lib"
+    $prep = "export DEBIAN_FRONTEND=noninteractive; apt-get update -y >/dev/null 2>&1; apt-get install -y --no-install-recommends python3 python3-cryptography >/dev/null 2>&1; python3 -c 'import os,sys,zipfile; os.makedirs(sys.argv[2], exist_ok=True); zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' '$wheelWsl' '$libWsl'"
+    Invoke-WslExec @("-d", $Distro, "-u", "root", "--exec", "/bin/bash", "-lc", $prep) | Out-Null
+    $py = "PYTHONPATH='$libWsl' python3 -m conrrad_citizen.host.seed_cli --home '$volWsl' --data-dir '$hostWsl' --envelope '$pkgWsl'"
+    $r = Invoke-WslExec @("-d", $Distro, "-u", "citizen", "--exec", "/bin/bash", "-lc", $py)
+    Set-WslProbeMeta "host_seed" $r
+    if ($r.Stdout -match '"ok": true' -or $r.Stdout -match '"ok":true') { return $true }
+    if ($r.ExitCode -eq 0) { return $true }
+    return $false
+}
+
+function Invoke-ExistingCitizenRecovery {
+    Write-CitizenHost "Existing Citizen detected."
+    Write-CitizenHost "Preserving Citizen volume."
+    Install-HostSeed
+    Write-CitizenHost "Verifying managed environment."
+    $before = Read-CitizenProductReadiness
+    if (-not $before.Ready) {
+        Invoke-StartExistingEnvironment | Out-Null
+        $null = Wait-CitizenProductReady -Attempts 20 -DelaySec 2
+    }
+    Invoke-HostSeedEvolution | Out-Null
+    $after = Wait-CitizenProductReady -Attempts 30 -DelaySec 2
+    if ($after.Ready) {
+        if ($before.Ready) {
+            $script:BirthMode = "ALREADY_RUNNING"
+        } else {
+            $script:BirthMode = "RESUME"
+        }
+        Complete-BootstrapSuccess
+    }
+    $script:InstallationResult = "FAILURE"
+    $script:BootstrapResult = "FAILURE"
+    Write-Fail "PROVISION_FAILED" "Existing Citizen was preserved but could not be started." "Citizen did not create a second Citizen.`nCitizen did not unregister the existing distribution.`nNo additional command is required right now." $false
+    exit 1
 }
 
 function Classify-WslStderr([string]$Stderr) {
@@ -1362,8 +1498,12 @@ Write-HostState "PROVISIONING_CONTAINER_ENGINE" $true
 Write-HostState "VERIFYING_CONTAINER_ENGINE" $true
 Write-HostState "ENVIRONMENT_READY" $true
 $volWsl = ConvertTo-WslPath $VolumeWin
-if ($own -eq "KNOWN_MANAGED_DISTRO" -or (Test-KnownCitizen)) {
-    Write-CitizenHost "Existing managed Citizen found."
+Install-HostSeed
+if (Test-KnownCitizen) {
+    Invoke-ExistingCitizenRecovery
+}
+if ($own -eq "KNOWN_MANAGED_DISTRO") {
+    Write-CitizenHost "Existing managed environment found."
     Write-CitizenHost "Verifying environment..."
 } else {
     Write-CitizenHost "Preparing managed Citizen environment..."
@@ -1373,8 +1513,8 @@ Write-HostState "VERIFYING_PUBLIC_IMAGE" $true
 Write-HostState "CREATING_ENVIRONMENT" $true
 Write-HostState "BIRTH_OR_RESUME" $true
 Write-HostState "VERIFYING_CITIZEN" $true
-$before = Read-CitizenProductReadiness
-if ($before.Ready) {
+$beforeFresh = Read-CitizenProductReadiness
+if ($beforeFresh.Ready) {
     $script:BirthMode = "ALREADY_RUNNING"
     Complete-BootstrapSuccess
 }
@@ -1392,6 +1532,8 @@ $code = $LASTEXITCODE
 $ErrorActionPreference = $prevEap
 $guestBlob = ($guestOut | Out-String)
 Set-WslProbeMeta "guest_bootstrap" ([pscustomobject]@{ ExitCode = $code; Stdout = $guestBlob; Stderr = $guestBlob })
+Install-HostSeed
+Invoke-HostSeedEvolution | Out-Null
 $after = Wait-CitizenProductReady -Attempts 30 -DelaySec 2
 if ($after.Ready) {
     Complete-BootstrapSuccess
