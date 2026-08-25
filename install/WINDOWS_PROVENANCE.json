@@ -32,12 +32,14 @@
   "existing_distro_recovery": true,
   "existing_citizen_recovery": true,
   "host_seed_install": true,
-  "runtime_only_bridge": true,
+  "runtime_evolution_during_host_door": false,
+  "ready_for_runtime_evolution": true,
+  "target_runtime_wheel_sha256": "032f73aa30430944b7f4aada10368226839b9d21613a4378c536b05c44ef9e65",
   "task_not_found_non_fatal": true,
   "product_readiness_authoritative": true,
   "failure_class": "HOST_UNREACHABLE",
   "affected_version": "0.4.2.7",
   "fix_version": "0.4.2.8",
   "systemd_product_requirement": false,
-  "note": "P0.11I.3C: host-owned Runtime Evolution Seed + existing Citizen recovery. Same public command for fresh install and recovery. Runtime-only bridge 64df202d to 446da11d. Living 0.4.3 is preserved; do not apply 0.4.5/0.4.6. Real Windows E2E is not claimed from the Linux agent. Do not overwrite 0.4.2.1-0.4.2.7."
+  "note": "P0.11I.3C-EXEC: public host-door release. Same command for fresh install and existing-Citizen recovery. Installs/updates Host Seed only. Does not apply runtime evolution or living Sync during this command. Target image 446da11d / wheel 032f73aa. Real Windows E2E is not claimed from the Linux agent. Do not overwrite 0.4.2.1-0.4.2.7."
 }

@@ -61,10 +61,10 @@ and existing-Citizen recovery. It:
 4. recovers `CONRRAD-Citizen` if it already exists (does not unregister or delete)
 5. installs the host-owned Runtime Evolution Seed in `%LOCALAPPDATA%\CONRRAD\CitizenHost`
 6. preserves `%LOCALAPPDATA%\CONRRAD\Citizen` (identity, History, Evidence)
-7. for a fresh volume: pulls `ghcr.io/grecoitalico/citizen@sha256:446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e`
-8. for an existing Citizen: runtime-only bridge from `64df202d…` to `446da11d…` (runtime version remains 0.4.2)
+7. for a fresh volume: pulls `ghcr.io/grecoitalico/citizen@sha256:446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e` and Births once
+8. for an existing Citizen: installs/updates the Host Seed only; does not replace the runtime image
 9. Birth only on an empty volume; Resume/recovery never creates a second Citizen
-10. reaches READY without living Sync
+10. reaches READY without living Sync or automatic runtime evolution
 
 Do not use CitizenSetup.py, NSSM, native Windows Python, or `1.4.0-alpha`.
 Windows is **not certified** until P0.11I.3C evidence is captured on the real machine.

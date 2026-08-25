@@ -42,7 +42,8 @@ That one instruction detects Windows, self-elevates for UAC, resumes after
 reboot, and either creates or **recovers** the managed distro `CONRRAD-Citizen`.
 It installs the host-owned Runtime Evolution Seed outside Citizen Life,
 preserves the existing Citizen volume, and does not Birth a second Citizen.
-No second paste. No native Windows pip. No native Windows Citizen.
+This command does not replace the runtime image. No second paste. No native
+Windows pip. No native Windows Citizen.
 
 Windows is **not certified**. Real Windows E2E remains pending on the existing machine.
 

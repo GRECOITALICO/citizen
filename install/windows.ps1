@@ -1,6 +1,7 @@
 # CONRRAD Citizen — public Windows host bootstrap (WSL2).
 # One instruction. Self-elevates. Resumes after reboot. Recovers the existing Citizen.
 # Installs the host-owned Runtime Evolution Seed. Never Sync. Never Births twice.
+# Host-door install does not apply runtime evolution. That is P0.11I.3D.
 #
 # powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/GRECOITALICO/citizen/citizen-windows-wsl2-0.4.2.8/install/windows.ps1 | iex"
 #
@@ -24,6 +25,7 @@ $LinuxInstallUrl = "https://raw.githubusercontent.com/GRECOITALICO/citizen/$Linu
 $ImageName = "ghcr.io/grecoitalico/citizen"
 $ImageDigest = "sha256:446da11ded1a23a64d1c906b98383215606d257a598026e99cc8b8cdeea0635e"
 $SourceImageDigest = "sha256:64df202d553c5aaff9cc0c74b01b8617e5877253778c9766d51dd59febd840da"
+$TargetWheelSha = "032f73aa30430944b7f4aada10368226839b9d21613a4378c536b05c44ef9e65"
 $Distro = "CONRRAD-Citizen"
 $RootfsName = "ubuntu-noble-wsl-amd64-24.04lts.rootfs.tar.gz"
 $StateDir = Join-Path $env:LOCALAPPDATA "CONRRAD\CitizenHost"
@@ -199,6 +201,8 @@ function Write-HostState {
         HOST_SEED_VERSION = $HostSeedVersion
         HOST_SEED_INSTALLED = [bool](Test-Path -LiteralPath (Join-Path $HostSeedDir "VERSION"))
         SOURCE_IMAGE = "$ImageName@$SourceImageDigest"
+        target_digest = $ImageDigest
+        request_id = ""
         CLEANUP_WARNINGS = @($script:CleanupWarnings)
         CLEANUP_CLASS = $script:CleanupClass
     }
@@ -468,10 +472,10 @@ function Get-VolumeClass {
 }
 
 function Get-InstallClass {
+    if ($script:ManagedDistroClass -eq "UNKNOWN_DISTRO") { return "UNKNOWN_DISTRO" }
     if (Test-KnownCitizen) { return "MANAGED_INSTALL_READY" }
     $vol = Get-VolumeClass
     if ($vol -eq "UNKNOWN_LEGACY_RESOURCE") { return "UNKNOWN_LEGACY_INSTALLATION" }
-    if ($script:ManagedDistroClass -eq "UNKNOWN_DISTRO") { return "UNKNOWN_DISTRO" }
     if ($vol -eq "KNOWN_MANAGED_CITIZEN") { return "MANAGED_INSTALL_READY" }
     if ($script:PriorBootstrapOurs -or $vol -eq "MANAGED_INSTALL_IN_PROGRESS") {
         return "MANAGED_INSTALL_IN_PROGRESS"
@@ -864,10 +868,13 @@ function Install-HostSeed {
     Write-CitizenHost "Updating host runtime seed."
     New-Item -ItemType Directory -Force -Path $HostSeedDir | Out-Null
     Set-Content -Encoding ascii -Path (Join-Path $HostSeedDir "VERSION") -Value $HostSeedVersion
+    Set-Content -Encoding ascii -Path (Join-Path $HostSeedDir "TARGET_DIGEST") -Value $ImageDigest
+    Set-Content -Encoding ascii -Path (Join-Path $HostSeedDir "TARGET_WHEEL_SHA256") -Value $TargetWheelSha
     Save-BootstrapCopy
     $receipt = Join-Path $StateDir "HOST_SEED_RECEIPTS.jsonl"
     $row = '{"kind":"HOST_SEED_STARTED","owner":"HOST_ADAPTER","version":"' + $HostSeedVersion + '"}'
     Add-Content -Encoding utf8 -Path $receipt -Value $row
+    Write-CitizenHost "Host seed installed."
 }
 
 function Invoke-StartExistingEnvironment {
@@ -877,6 +884,8 @@ function Invoke-StartExistingEnvironment {
 }
 
 function Invoke-HostSeedEvolution {
+    # Not invoked by this host-door install. P0.11I.3D applies runtime evolution
+    # after HOST_SEED_INSTALLED. Copying CLASS_PACKAGE is prepare, not apply.
     Write-HostState "RUNTIME_EVOLUTION" $true
     Write-CitizenHost "Ready for runtime evolution."
     $volWsl = ConvertTo-WslPath $VolumeWin
@@ -907,7 +916,7 @@ function Invoke-ExistingCitizenRecovery {
         Invoke-StartExistingEnvironment | Out-Null
         $null = Wait-CitizenProductReady -Attempts 20 -DelaySec 2
     }
-    Invoke-HostSeedEvolution | Out-Null
+    Write-CitizenHost "Ready for runtime evolution."
     $after = Wait-CitizenProductReady -Attempts 30 -DelaySec 2
     if ($after.Ready) {
         if ($before.Ready) {
@@ -1273,24 +1282,58 @@ function Invoke-RequirementDetect($Item) {
     }
 }
 
+function Convert-RequirementShowStatus([string]$Status) {
+    if ($Status -in @("VERIFIED", "PRESENT", "READY")) { return "READY" }
+    if ($Status -eq "BLOCKED") { return "BLOCKED" }
+    return "MISSING"
+}
+
 function Show-Inventory($Manifest) {
     Write-CitizenHost "Checking your Windows environment..."
-    $labels = [ordered]@{}
-    foreach ($item in $Manifest.requirements) {
+    Write-CitizenHost "Requirements:"
+    $rows = @(
+        @{ Id = "windows_version"; Name = "Windows version" },
+        @{ Id = "windows_architecture"; Name = "architecture" },
+        @{ Id = "virtualization"; Name = "virtualization" },
+        @{ Id = "wsl_runtime"; Name = "WSL availability" },
+        @{ Id = "wsl_version"; Name = "WSL2 capability" },
+        @{ Id = "administrator_elevation"; Name = "admin/elevation" },
+        @{ Id = "disk_space"; Name = "disk" },
+        @{ Id = "memory"; Name = "memory" },
+        @{ Id = "linux_https"; Name = "network" },
+        @{ Id = "managed_distribution"; Name = "existing CONRRAD-Citizen" },
+        @{ Id = "port_3434"; Name = "port 3434" },
+        @{ Id = "public_ghcr_access"; Name = "public image access" }
+    )
+    foreach ($row in $rows) {
+        $item = $null
+        foreach ($req in $Manifest.requirements) {
+            if ([string]$req.id -eq $row.Id) { $item = $req; break }
+        }
+        if ($null -eq $item) { continue }
         $status = Invoke-RequirementDetect $item
         Set-RequirementStatus $item.id $status
-        $label = [string]$item.user_label
-        if (-not $label) { $label = [string]$item.name }
-        $show = "OK"
-        if ($status -in @("MISSING", "BLOCKED", "UNKNOWN")) { $show = "MISSING" }
-        if (-not $labels.Contains($label) -or $labels[$label] -ne "MISSING") {
-            $labels[$label] = $show
+        $show = Convert-RequirementShowStatus $status
+        $note = ""
+        if ($show -eq "MISSING") { $note = " → provision" }
+        if ($show -eq "BLOCKED") { $note = " → " + [string]$item.failure_message }
+        Write-Host ("  {0,-28} {1}{2}" -f $row.Name, $show, $note)
+    }
+    foreach ($req in $Manifest.requirements) {
+        if (-not $script:RequirementsState.ContainsKey($req.id)) {
+            Set-RequirementStatus $req.id (Invoke-RequirementDetect $req)
         }
     }
-    foreach ($key in $labels.Keys) {
-        $pad = "." * [Math]::Max(2, 40 - $key.Length)
-        Write-Host ("{0}{1} {2}" -f $key, $pad, $labels[$key])
-    }
+    $hostShow = "MISSING"
+    if (Test-Path -LiteralPath $StateFile) { $hostShow = "READY" }
+    $hostNote = ""
+    if ($hostShow -eq "MISSING") { $hostNote = " → provision" }
+    Write-Host ("  {0,-28} {1}{2}" -f "CitizenHost state", $hostShow, $hostNote)
+    $seedShow = "MISSING"
+    if (Test-Path -LiteralPath (Join-Path $HostSeedDir "VERSION")) { $seedShow = "READY" }
+    $seedNote = ""
+    if ($seedShow -eq "MISSING") { $seedNote = " → provision" }
+    Write-Host ("  {0,-28} {1}{2}" -f "Host Seed state", $seedShow, $seedNote)
 }
 
 function Test-RequirementNeedsAdmin($Manifest) {
@@ -1533,7 +1576,7 @@ $ErrorActionPreference = $prevEap
 $guestBlob = ($guestOut | Out-String)
 Set-WslProbeMeta "guest_bootstrap" ([pscustomobject]@{ ExitCode = $code; Stdout = $guestBlob; Stderr = $guestBlob })
 Install-HostSeed
-Invoke-HostSeedEvolution | Out-Null
+Write-CitizenHost "Ready for runtime evolution."
 $after = Wait-CitizenProductReady -Attempts 30 -DelaySec 2
 if ($after.Ready) {
     Complete-BootstrapSuccess
