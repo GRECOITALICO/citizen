@@ -1,0 +1,9 @@
+{
+  "document": "CITIZEN_ANDROID_PERMISSION_001",
+  "timestamp": "2026-08-27T22:00:24Z",
+  "camera_requested": false,
+  "microphone_requested": false,
+  "location_requested": false,
+  "contacts_requested": false,
+  "principle": "V0 requires only strictly necessary permissions (Network)."
+}

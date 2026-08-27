@@ -1,0 +1,13 @@
+{
+  "document": "CITIZEN_ANDROID_V0_001",
+  "timestamp": "2026-08-27T22:00:24Z",
+  "architecture_enforcement": "CITIZEN CORE -> CITIZEN PROTOCOL -> ANDROID SURFACE",
+  "surface_capabilities": [
+    "CONNECT",
+    "STATUS",
+    "CONVERSATION",
+    "UPDATE"
+  ],
+  "identity_duplication": false,
+  "canonical_state_owner": "CITIZEN"
+}

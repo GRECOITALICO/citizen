@@ -1,0 +1,8 @@
+{
+  "document": "CITIZEN_ANDROID_UPDATE_001",
+  "timestamp": "2026-08-27T22:00:24Z",
+  "mechanism": "Manifest Validation -> Download -> Hash Verification -> Install",
+  "verifies_cryptographic_hash": true,
+  "rejects_unsigned_or_invalid": true,
+  "preserves_citizen_state": true
+}

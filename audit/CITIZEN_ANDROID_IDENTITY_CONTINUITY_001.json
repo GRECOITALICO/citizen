@@ -1,0 +1,7 @@
+{
+  "document": "CITIZEN_ANDROID_IDENTITY_CONTINUITY_001",
+  "timestamp": "2026-08-27T22:00:24Z",
+  "surface_id_persists": true,
+  "citizen_id_reference_persists": true,
+  "duplicate_citizen_created_on_reinstall": false
+}

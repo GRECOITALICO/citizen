@@ -1,0 +1,7 @@
+{
+  "document": "CITIZEN_ANDROID_ROLLBACK_001",
+  "timestamp": "2026-08-27T22:00:24Z",
+  "rollback_preserves_identity": true,
+  "rollback_preserves_evidence": true,
+  "rollback_destroys_citizen": false
+}

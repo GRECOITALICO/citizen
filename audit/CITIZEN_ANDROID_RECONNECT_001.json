@@ -1,0 +1,6 @@
+{
+  "document": "CITIZEN_ANDROID_RECONNECT_001",
+  "timestamp": "2026-08-27T22:00:24Z",
+  "offline_behavior": "Display last known status. Do not invent state.",
+  "reconnect_behavior": "Re-establish protocol state and synchronization."
+}
